@@ -31,6 +31,9 @@ export default function AudioLibrary() {
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractProgress, setExtractProgress] = useState(0)
   const [extractedFilename, setExtractedFilename] = useState('')
+  const [ffmpegStatus, setFFmpegStatus] = useState<{ available: boolean, version?: string, path?: string } | null>(null)
+  const [isInstallingFFmpeg, setIsInstallingFFmpeg] = useState(false)
+  const [installProgress, setInstallProgress] = useState(0)
 
   const handleUpload = async () => {
     try {
@@ -159,10 +162,49 @@ export default function AudioLibrary() {
     }
   }
 
-  const handleOpenExtractDialog = () => {
+  const handleOpenExtractDialog = async () => {
     setExtractedFilename('')
     setExtractProgress(0)
+
+    // 检查FFmpeg状态
+    try {
+      const status = await invoke('check_ffmpeg_status')
+      setFFmpegStatus(status as any)
+    } catch (error) {
+      console.error('检查FFmpeg状态失败:', error)
+      setFFmpegStatus({ available: false })
+    }
+
     setShowExtractDialog(true)
+  }
+
+  const handleInstallFFmpeg = async () => {
+    setIsInstallingFFmpeg(true)
+    setInstallProgress(0)
+
+    // 监听安装进度
+    const unlisten = listen<number>('ffmpeg-install-progress', (event) => {
+      setInstallProgress(event.payload)
+    })
+
+    try {
+      const result = await invoke<string>('install_ffmpeg')
+      alert(result)
+
+      // 重新检查FFmpeg状态
+      try {
+        const status = await invoke('check_ffmpeg_status')
+        setFFmpegStatus(status as any)
+      } catch (error) {
+        console.error('重新检查FFmpeg状态失败:', error)
+      }
+    } catch (error) {
+      console.error('安装FFmpeg失败:', error)
+      alert('安装FFmpeg失败: ' + error)
+    } finally {
+      setIsInstallingFFmpeg(false)
+      unlisten.then(fn => fn())
+    }
   }
 
   const handleExtractAudio = async () => {
@@ -638,6 +680,50 @@ export default function AudioLibrary() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96">
             <h3 className="text-xl font-bold mb-4">提取音频</h3>
+
+            {/* FFmpeg状态显示 */}
+            <div className="mb-4 p-3 border rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-3 h-3 rounded-full ${ffmpegStatus?.available ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="font-medium text-sm">
+                  FFmpeg状态: {ffmpegStatus?.available ? '已安装' : '未安装'}
+                </span>
+              </div>
+              {ffmpegStatus?.available && ffmpegStatus.version && (
+                <p className="text-xs text-gray-600 ml-5">{ffmpegStatus.version}</p>
+              )}
+              {!ffmpegStatus?.available && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-red-600">需要安装FFmpeg才能提取音频</p>
+                  {isInstallingFFmpeg ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <Loader2 size={16} className="animate-spin" />
+                        <span className="text-sm font-medium">正在安装FFmpeg...</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-600 h-full transition-all duration-300 ease-out"
+                          style={{ width: `${installProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 text-center">
+                        {installProgress.toFixed(0)}%
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleInstallFFmpeg}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Loader2 size={14} />
+                      <span>一键安装FFmpeg</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 输出文件名（可选）
@@ -648,7 +734,7 @@ export default function AudioLibrary() {
                 onChange={(e) => setExtractedFilename(e.target.value)}
                 placeholder="留空使用默认文件名"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                disabled={isExtracting}
+                disabled={isExtracting || isInstallingFFmpeg}
               />
               <p className="text-xs text-gray-500 mt-1">文件将保存为 MP3 格式</p>
             </div>
@@ -674,15 +760,20 @@ export default function AudioLibrary() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowExtractDialog(false)}
-                disabled={isExtracting}
+                disabled={isExtracting || isInstallingFFmpeg}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 取消
               </button>
-              {!isExtracting ? (
+              {!isExtracting && !isInstallingFFmpeg ? (
                 <button
                   onClick={handleExtractAudio}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                  disabled={!ffmpegStatus?.available}
+                  className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
+                    ffmpegStatus?.available
+                      ? 'bg-orange-600 hover:bg-orange-700'
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
                 >
                   <Film size={16} />
                   <span>选择视频文件</span>
@@ -693,7 +784,7 @@ export default function AudioLibrary() {
                   className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed"
                 >
                   <Loader2 size={16} className="animate-spin" />
-                  <span>处理中...</span>
+                  <span>{isExtracting ? '处理中...' : '安装中...'}</span>
                 </button>
               )}
             </div>

@@ -8,11 +8,22 @@ use anyhow::Result;
 use std::fs;
 use std::io::BufReader;
 use std::process::Command;
+use std::fs::File;
+use std::io::Write;
+use zip::ZipArchive;
+use dirs::home_dir;
 use rodio::{Decoder, Source};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::probe::Hint;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::formats::FormatOptions;
+
+#[derive(Debug, Serialize)]
+pub struct FFmpegStatus {
+    pub available: bool,
+    pub version: Option<String>,
+    pub path: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioFile {
@@ -486,4 +497,270 @@ pub async fn extract_audio_from_video(
     .map_err(|e| format!("保存到数据库失败: {}", e))?;
 
     Ok(filename)
+}
+
+/// 检查FFmpeg状态
+#[tauri::command]
+pub async fn check_ffmpeg_status() -> Result<FFmpegStatus, String> {
+    let output = Command::new("ffmpeg")
+        .arg("-version")
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                let version_str = String::from_utf8_lossy(&output.stdout);
+                let version_line = version_str.lines().next().unwrap_or("").to_string();
+                let version = Some(version_line);
+                let path = Some("ffmpeg".to_string());
+
+                Ok(FFmpegStatus {
+                    available: true,
+                    version,
+                    path,
+                })
+            } else {
+                Ok(FFmpegStatus {
+                    available: false,
+                    version: None,
+                    path: None,
+                })
+            }
+        }
+        Err(_) => {
+            Ok(FFmpegStatus {
+                available: false,
+                version: None,
+                path: None,
+            })
+        }
+    }
+}
+
+/// 一键下载安装FFmpeg
+#[tauri::command]
+pub async fn install_ffmpeg(app: AppHandle) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        install_ffmpeg_windows(app).await
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        install_ffmpeg_macos().await
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        install_ffmpeg_linux().await
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        Err("不支持的操作系统".to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+async fn install_ffmpeg_windows(app: AppHandle) -> Result<String, String> {
+    let home_dir = home_dir().ok_or("无法获取用户目录")?;
+    let ffmpeg_dir = home_dir.join("ffmpeg");
+    let ffmpeg_exe = ffmpeg_dir.join("bin").join("ffmpeg.exe");
+
+    // 检查是否已经安装
+    if ffmpeg_exe.exists() {
+        // 检查PATH环境变量
+        if let Ok(output) = Command::new("ffmpeg").arg("-version").output() {
+            if output.status.success() {
+                return Ok("FFmpeg已安装并配置完成".to_string());
+            }
+        }
+
+        // 添加到PATH环境变量
+        add_to_path_windows(ffmpeg_dir.join("bin").to_str().unwrap())?;
+        return Ok("FFmpeg已安装，已配置环境变量".to_string());
+    }
+
+    // 发送进度开始事件
+    app.emit_all("ffmpeg-install-progress", 0u8).map_err(|e| e.to_string())?;
+
+    // 创建安装目录
+    fs::create_dir_all(&ffmpeg_dir)
+        .map_err(|e| format!("创建安装目录失败: {}", e))?;
+
+    // 发送进度 10%
+    app.emit_all("ffmpeg-install-progress", 10u8).map_err(|e| e.to_string())?;
+
+    // 下载FFmpeg
+    let download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
+    let client = reqwest::Client::new();
+
+    let response = client.get(download_url)
+        .send()
+        .await
+        .map_err(|e| format!("下载FFmpeg失败: {}", e))?;
+
+    let total_size = response.content_length().unwrap_or(0);
+    let mut downloaded = 0u64;
+
+    // 发送进度 20%
+    app.emit_all("ffmpeg-install-progress", 20u8).map_err(|e| e.to_string())?;
+
+    // 下载文件
+    let temp_zip_path = ffmpeg_dir.join("ffmpeg.zip");
+    let mut file = File::create(&temp_zip_path)
+        .map_err(|e| format!("创建临时文件失败: {}", e))?;
+
+    let mut stream = response.bytes_stream();
+    use futures_util::StreamExt;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("下载中断: {}", e))?;
+        file.write_all(&chunk)
+            .map_err(|e| format!("写入文件失败: {}", e))?;
+        downloaded += chunk.len() as u64;
+
+        // 更新进度 (20% - 80%)
+        if total_size > 0 {
+            let progress = 20 + (downloaded * 60 / total_size) as u8;
+            app.emit_all("ffmpeg-install-progress", progress).map_err(|e| e.to_string())?;
+        }
+    }
+
+    drop(file);
+
+    // 发送进度 80%
+    app.emit_all("ffmpeg-install-progress", 80u8).map_err(|e| e.to_string())?;
+
+    // 解压文件
+    let zip_file = File::open(&temp_zip_path)
+        .map_err(|e| format!("打开压缩文件失败: {}", e))?;
+    let mut archive = ZipArchive::new(zip_file)
+        .map_err(|e| format!("读取压缩文件失败: {}", e))?;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("解压失败: {}", e))?;
+        let outpath = ffmpeg_dir.join(file.mangled_name());
+
+        if (*file.name()).ends_with('/') {
+            fs::create_dir_all(&outpath)
+                .map_err(|e| format!("创建目录失败: {}", e))?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(p)
+                        .map_err(|e| format!("创建父目录失败: {}", e))?;
+                }
+            }
+            let mut outfile = File::create(&outpath)
+                .map_err(|e| format!("创建文件失败: {}", e))?;
+            std::io::copy(&mut file, &mut outfile)
+                .map_err(|e| format!("写入文件失败: {}", e))?;
+        }
+    }
+
+    // 删除压缩文件
+    fs::remove_file(&temp_zip_path)
+        .map_err(|e| format!("删除临时文件失败: {}", e))?;
+
+    // 发送进度 90%
+    app.emit_all("ffmpeg-install-progress", 90u8).map_err(|e| e.to_string())?;
+
+    // 添加到PATH环境变量
+    add_to_path_windows(ffmpeg_dir.join("bin").to_str().unwrap())?;
+
+    // 发送完成进度
+    app.emit_all("ffmpeg-install-progress", 100u8).map_err(|e| e.to_string())?;
+
+    Ok("FFmpeg安装完成！环境变量已更新，请重启应用后生效".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn add_to_path_windows(ffmpeg_path: &str) -> Result<(), String> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let environment = hkcu.open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)
+        .map_err(|e| format!("打开注册表失败: {}", e))?;
+
+    let path_value: String = environment.get_value("Path")
+        .unwrap_or_default();
+
+    if !path_value.contains(ffmpeg_path) {
+        let new_path = if path_value.is_empty() {
+            ffmpeg_path.to_string()
+        } else {
+            format!("{};{}", path_value, ffmpeg_path)
+        };
+
+        environment.set_value("Path", &new_path)
+            .map_err(|e| format!("设置PATH失败: {}", e))?;
+
+        // 通知系统环境变量已更改
+        unsafe {
+            let env_str = "Environment\0".encode_utf16().collect::<Vec<u16>>();
+            winapi::um::winuser::SendMessageW(
+                winapi::um::winuser::HWND_BROADCAST,
+                winapi::um::winuser::WM_SETTINGCHANGE,
+                0,
+                env_str.as_ptr() as isize,
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn install_ffmpeg_macos() -> Result<String, String> {
+    let output = Command::new("brew")
+        .args(&["install", "ffmpeg"])
+        .output()
+        .await
+        .map_err(|e| format!("执行brew命令失败: {}", e))?;
+
+    if output.status.success() {
+        Ok("FFmpeg通过Homebrew安装完成".to_string())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Homebrew安装FFmpeg失败: {}", error))
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn install_ffmpeg_linux() -> Result<String, String> {
+    // 尝试apt
+    let output = Command::new("apt")
+        .args(&["update"])
+        .output()
+        .await;
+
+    if let Ok(result) = output {
+        if result.status.success() {
+            let output = Command::new("apt")
+                .args(&["install", "-y", "ffmpeg"])
+                .output()
+                .await
+                .map_err(|e| format!("执行apt命令失败: {}", e))?;
+
+            if output.status.success() {
+                return Ok("FFmpeg通过apt安装完成".to_string());
+            }
+        }
+    }
+
+    // 尝试yum
+    let output = Command::new("yum")
+        .args(&["install", "-y", "ffmpeg"])
+        .output()
+        .await
+        .map_err(|e| format!("执行yum命令失败: {}", e))?;
+
+    if output.status.success() {
+        Ok("FFmpeg通过yum安装完成".to_string())
+    } else {
+        Err("无法安装FFmpeg，请手动安装".to_string())
+    }
 }

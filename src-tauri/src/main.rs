@@ -140,6 +140,8 @@ fn main() {
             recorder::stop_recording,
             recorder::get_recording_state,
             audio::extract_audio_from_video,
+            audio::check_ffmpeg_status,
+            audio::install_ffmpeg,
             autostart::get_auto_launch_status,
             autostart::set_auto_launch,
         ])
