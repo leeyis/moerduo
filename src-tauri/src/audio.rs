@@ -673,7 +673,7 @@ async fn install_ffmpeg_windows(app: AppHandle) -> Result<String, String> {
     // 发送完成进度
     app.emit_all("ffmpeg-install-progress", 100u8).map_err(|e| e.to_string())?;
 
-    Ok("FFmpeg安装完成！环境变量已更新，请重启应用后生效".to_string())
+    Ok("FFmpeg安装完成！应用即将重启以使更改生效".to_string())
 }
 
 #[cfg(target_os = "windows")]

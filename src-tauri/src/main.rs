@@ -11,6 +11,7 @@ mod stats;
 mod settings;
 mod recorder;
 mod autostart;
+mod restart;
 
 use tauri::{Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem, CustomMenuItem};
 use std::sync::Arc;
@@ -142,6 +143,7 @@ fn main() {
             audio::extract_audio_from_video,
             audio::check_ffmpeg_status,
             audio::install_ffmpeg,
+            restart::restart_app,
             autostart::get_auto_launch_status,
             autostart::set_auto_launch,
         ])

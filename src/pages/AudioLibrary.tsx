@@ -34,6 +34,7 @@ export default function AudioLibrary() {
   const [ffmpegStatus, setFFmpegStatus] = useState<{ available: boolean, version?: string, path?: string } | null>(null)
   const [isInstallingFFmpeg, setIsInstallingFFmpeg] = useState(false)
   const [installProgress, setInstallProgress] = useState(0)
+  const [isRestarting, setIsRestarting] = useState(false)
 
   const handleUpload = async () => {
     try {
@@ -189,20 +190,39 @@ export default function AudioLibrary() {
 
     try {
       const result = await invoke<string>('install_ffmpeg')
-      alert(result)
 
-      // 重新检查FFmpeg状态
-      try {
-        const status = await invoke('check_ffmpeg_status')
-        setFFmpegStatus(status as any)
-      } catch (error) {
-        console.error('重新检查FFmpeg状态失败:', error)
+      // 如果安装成功，显示重启状态并重启应用
+      if (result.includes('安装完成')) {
+        setIsRestarting(true)
+        alert(result)
+
+        // 延迟2秒后重启，给用户时间看到成功消息
+        setTimeout(async () => {
+          try {
+            await invoke('restart_app')
+          } catch (error) {
+            console.error('重启应用失败:', error)
+            setIsRestarting(false)
+            alert('重启失败，请手动重启应用')
+          }
+        }, 2000)
+      } else {
+        alert(result)
+        // 如果只是配置环境变量，重新检查FFmpeg状态
+        try {
+          const status = await invoke('check_ffmpeg_status')
+          setFFmpegStatus(status as any)
+        } catch (error) {
+          console.error('重新检查FFmpeg状态失败:', error)
+        }
       }
     } catch (error) {
       console.error('安装FFmpeg失败:', error)
       alert('安装FFmpeg失败: ' + error)
     } finally {
-      setIsInstallingFFmpeg(false)
+      if (!isRestarting) {
+        setIsInstallingFFmpeg(false)
+      }
       unlisten.then(fn => fn())
     }
   }
@@ -699,17 +719,26 @@ export default function AudioLibrary() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-blue-600">
                         <Loader2 size={16} className="animate-spin" />
-                        <span className="text-sm font-medium">正在安装FFmpeg...</span>
+                        <span className="text-sm font-medium">
+                          {isRestarting ? "应用即将重启..." : "正在安装FFmpeg..."}
+                        </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                         <div
-                          className="bg-blue-600 h-full transition-all duration-300 ease-out"
+                          className={`h-full transition-all duration-300 ease-out ${
+                            isRestarting ? "bg-green-600" : "bg-blue-600"
+                          }`}
                           style={{ width: `${installProgress}%` }}
                         />
                       </div>
                       <p className="text-xs text-gray-500 text-center">
-                        {installProgress.toFixed(0)}%
+                        {isRestarting ? "重启中..." : `${installProgress.toFixed(0)}%`}
                       </p>
+                      {isRestarting && (
+                        <p className="text-xs text-green-600 text-center">
+                          FFmpeg安装完成，应用正在重启以使更改生效
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <button
@@ -734,7 +763,7 @@ export default function AudioLibrary() {
                 onChange={(e) => setExtractedFilename(e.target.value)}
                 placeholder="留空使用默认文件名"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                disabled={isExtracting || isInstallingFFmpeg}
+                disabled={isExtracting || isInstallingFFmpeg || isRestarting}
               />
               <p className="text-xs text-gray-500 mt-1">文件将保存为 MP3 格式</p>
             </div>
@@ -760,12 +789,12 @@ export default function AudioLibrary() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowExtractDialog(false)}
-                disabled={isExtracting || isInstallingFFmpeg}
+                disabled={isExtracting || isInstallingFFmpeg || isRestarting}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 取消
               </button>
-              {!isExtracting && !isInstallingFFmpeg ? (
+              {!isExtracting && !isInstallingFFmpeg && !isRestarting ? (
                 <button
                   onClick={handleExtractAudio}
                   disabled={!ffmpegStatus?.available}
@@ -784,7 +813,10 @@ export default function AudioLibrary() {
                   className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed"
                 >
                   <Loader2 size={16} className="animate-spin" />
-                  <span>{isExtracting ? '处理中...' : '安装中...'}</span>
+                  <span>
+                    {isExtracting ? '处理中...' :
+                     isRestarting ? '重启中...' : '安装中...'}
+                  </span>
                 </button>
               )}
             </div>
