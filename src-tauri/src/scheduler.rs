@@ -49,14 +49,14 @@ impl Scheduler {
             let mut stmt = conn
                 .prepare(
                     "SELECT id, name, hour, minute, repeat_mode, custom_days, playlist_id,
-                            volume, fade_in_duration, priority
+                            volume, fade_in_duration, duration_minutes, priority
                      FROM scheduled_tasks
                      WHERE is_enabled = 1
                      ORDER BY priority DESC, hour, minute"
                 )
                 .map_err(|e| e.to_string())?;
 
-            let tasks: Vec<(i64, String, i64, i64, String, Option<String>, i64, i64, i64, i64)> = stmt
+            let tasks: Vec<(i64, String, i64, i64, String, Option<String>, i64, i64, i64, Option<i64>, i64)> = stmt
                 .query_map([], |row| {
                     Ok((
                         row.get(0)?,
@@ -69,6 +69,7 @@ impl Scheduler {
                         row.get(7)?,
                         row.get(8)?,
                         row.get(9)?,
+                        row.get(10)?,
                     ))
                 })
                 .map_err(|e| e.to_string())?
@@ -78,7 +79,7 @@ impl Scheduler {
             tasks
         };
 
-        for (task_id, name, hour, minute, repeat_mode, custom_days, playlist_id, volume, fade_in_duration, _priority) in tasks {
+        for (task_id, name, hour, minute, repeat_mode, custom_days, playlist_id, volume, fade_in_duration, duration_minutes, _priority) in tasks {
             // 检查时间是否匹配（允许当前分钟或前一分钟内执行，避免因检查间隔导致错过）
             let time_matches = if current_minute == 0 {
                 // 如果当前是整点，需要检查上一小时的59分
@@ -171,6 +172,7 @@ impl Scheduler {
                 playlist_id,
                 volume,
                 fade_in_duration,
+                duration_minutes,
             )
             .await
             {
@@ -197,6 +199,7 @@ impl Scheduler {
         playlist_id: i64,
         volume: i64,
         fade_in_duration: i64,
+        duration_minutes: Option<i64>,
     ) -> Result<(), String> {
         // 获取播放列表中的所有音频
         let audio_files = {
@@ -232,8 +235,27 @@ impl Scheduler {
         player_guard.set_playlist_queue(audio_ids, true); // 标记为自动播放
         drop(player_guard);
 
+        // 记录开始时间（用于时长控制）
+        let start_time = std::time::Instant::now();
+        let max_duration_secs = duration_minutes.map(|mins| mins as u64 * 60);
+
         // 播放每个音频文件
         for (audio_id, file_path, duration, audio_name) in audio_files {
+            // 检查是否超过时长限制
+            if let Some(max_secs) = max_duration_secs {
+                let elapsed_secs = start_time.elapsed().as_secs();
+                if elapsed_secs >= max_secs {
+                    println!("⏹️ [Scheduler] 达到时长限制 ({} 分钟)，停止播放", duration_minutes.unwrap());
+
+                    // 停止播放器
+                    let mut player_guard = player.lock().await;
+                    player_guard.stop();
+                    drop(player_guard);
+
+                    break;
+                }
+            }
+
             let mut player_guard = player.lock().await;
 
             // 如果配置了渐强，先设置较低音量
@@ -265,8 +287,33 @@ impl Scheduler {
                 drop(player_guard);
             }
 
-            // 等待播放完成
-            sleep(Duration::from_secs(duration as u64)).await;
+            // 等待播放完成，但要考虑时长限制
+            let audio_duration_secs = duration as u64;
+
+            if let Some(max_secs) = max_duration_secs {
+                let elapsed_secs = start_time.elapsed().as_secs();
+                let remaining_secs = if max_secs > elapsed_secs {
+                    max_secs - elapsed_secs
+                } else {
+                    0
+                };
+
+                // 只等待剩余时长或音频时长，取较小值
+                let wait_secs = audio_duration_secs.min(remaining_secs);
+                sleep(Duration::from_secs(wait_secs)).await;
+
+                // 如果音频还没播完但达到时长限制，停止播放
+                if wait_secs < audio_duration_secs {
+                    println!("⏹️ [Scheduler] 达到时长限制，停止当前音频");
+                    let mut player_guard = player.lock().await;
+                    player_guard.stop();
+                    drop(player_guard);
+                    break;
+                }
+            } else {
+                // 没有时长限制，等待音频播放完成
+                sleep(Duration::from_secs(audio_duration_secs)).await;
+            }
 
             // 更新播放计数
             let conn = db.lock().await;

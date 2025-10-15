@@ -18,10 +18,14 @@ interface PlayerContextType {
     id: number
     name: string
   } | null
-  playAudio: (id: number, name: string) => Promise<void>
+  currentIndex: number
+  totalCount: number
+  playAudio: (id: number, name: string, audioList?: Array<{id: number, name: string}>) => Promise<void>
   pauseAudio: () => Promise<void>
   stopAudio: () => Promise<void>
   togglePlayPause: () => Promise<void>
+  playNext: () => Promise<void>
+  playPrevious: () => Promise<void>
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined)
@@ -29,6 +33,8 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined)
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentAudio, setCurrentAudio] = useState<{ id: number; name: string } | null>(null)
+  const [audioList, setAudioList] = useState<Array<{id: number, name: string}>>([])
+  const [currentIndex, setCurrentIndex] = useState(-1)
 
   // 定期同步播放状态
   useEffect(() => {
@@ -65,11 +71,28 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval)
   }, [isPlaying, currentAudio])
 
-  const playAudio = async (id: number, name: string) => {
+  const playAudio = async (id: number, name: string, newAudioList?: Array<{id: number, name: string}>) => {
     try {
       await invoke('play_audio', { id })
       setCurrentAudio({ id, name })
       setIsPlaying(true)
+
+      // 如果提供了新的音频列表，更新列表和索引
+      if (newAudioList && newAudioList.length > 0) {
+        setAudioList(newAudioList)
+        const index = newAudioList.findIndex(audio => audio.id === id)
+        setCurrentIndex(index)
+      } else {
+        // 如果没有提供列表，检查当前列表中是否有这个音频
+        const index = audioList.findIndex(audio => audio.id === id)
+        if (index !== -1) {
+          setCurrentIndex(index)
+        } else {
+          // 如果列表中没有，清空列表
+          setAudioList([{ id, name }])
+          setCurrentIndex(0)
+        }
+      }
     } catch (error) {
       console.error('播放失败:', error)
       throw error
@@ -109,15 +132,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const playNext = async () => {
+    if (audioList.length === 0 || currentIndex === -1) return
+
+    const nextIndex = currentIndex + 1
+    if (nextIndex < audioList.length) {
+      const nextAudio = audioList[nextIndex]
+      await playAudio(nextAudio.id, nextAudio.name)
+    }
+  }
+
+  const playPrevious = async () => {
+    if (audioList.length === 0 || currentIndex === -1) return
+
+    const prevIndex = currentIndex - 1
+    if (prevIndex >= 0) {
+      const prevAudio = audioList[prevIndex]
+      await playAudio(prevAudio.id, prevAudio.name)
+    }
+  }
+
   return (
     <PlayerContext.Provider
       value={{
         isPlaying,
         currentAudio,
+        currentIndex,
+        totalCount: audioList.length,
         playAudio,
         pauseAudio,
         stopAudio,
         togglePlayPause,
+        playNext,
+        playPrevious,
       }}
     >
       {children}

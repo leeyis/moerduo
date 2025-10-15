@@ -13,6 +13,7 @@ interface Task {
   playlist_name: string
   volume: number
   fade_in_duration: number
+  duration_minutes: number | null
   is_enabled: boolean
   priority: number
   created_date: string
@@ -23,11 +24,22 @@ interface Playlist {
   name: string
 }
 
+interface TaskConflict {
+  task_id: number
+  task_name: string
+  hour: number
+  minute: number
+}
+
 export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [showDialog, setShowDialog] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [conflicts, setConflicts] = useState<TaskConflict[]>([])
+  const [showConflictDialog, setShowConflictDialog] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [taskToDelete, setTaskToDelete] = useState<number | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -38,6 +50,7 @@ export default function Tasks() {
     playlist_id: 0,
     volume: 50,
     fade_in_duration: 30,
+    duration_minutes: null as number | null,
     priority: 0,
   })
 
@@ -83,6 +96,24 @@ export default function Tasks() {
         ? JSON.stringify(formData.custom_days)
         : null
 
+      // 检查任务冲突
+      const conflictList = await invoke<TaskConflict[]>('check_task_conflicts', {
+        taskId: editingTask?.id || null,
+        hour: formData.hour,
+        minute: formData.minute,
+        repeatMode: formData.repeat_mode,
+        customDays: customDaysStr,
+        durationMinutes: formData.duration_minutes,
+        playlistId: formData.playlist_id,
+      })
+
+      if (conflictList.length > 0) {
+        setConflicts(conflictList)
+        setShowConflictDialog(true)
+        return
+      }
+
+      // 没有冲突，保存任务
       if (editingTask) {
         await invoke('update_scheduled_task', {
           id: editingTask.id,
@@ -94,6 +125,7 @@ export default function Tasks() {
           playlistId: formData.playlist_id,
           volume: formData.volume,
           fadeInDuration: formData.fade_in_duration,
+          durationMinutes: formData.duration_minutes,
           priority: formData.priority,
         })
       } else {
@@ -106,6 +138,7 @@ export default function Tasks() {
           playlistId: formData.playlist_id,
           volume: formData.volume,
           fadeInDuration: formData.fade_in_duration,
+          durationMinutes: formData.duration_minutes,
           priority: formData.priority,
         })
       }
@@ -127,15 +160,28 @@ export default function Tasks() {
     }
   }
 
-  const handleDeleteTask = async (id: number) => {
-    if (!confirm('确定删除该定时任务吗？')) return
+  const handleDeleteTask = (id: number) => {
+    setTaskToDelete(id)
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDeleteTask = async () => {
+    if (taskToDelete === null) return
 
     try {
-      await invoke('delete_scheduled_task', { id })
+      await invoke('delete_scheduled_task', { id: taskToDelete })
       loadTasks()
+      setShowDeleteConfirm(false)
+      setTaskToDelete(null)
     } catch (error) {
       console.error('删除任务失败:', error)
+      alert('删除任务失败: ' + error)
     }
+  }
+
+  const cancelDeleteTask = () => {
+    setShowDeleteConfirm(false)
+    setTaskToDelete(null)
   }
 
   const handleEditTask = (task: Task) => {
@@ -149,6 +195,7 @@ export default function Tasks() {
       playlist_id: task.playlist_id,
       volume: task.volume,
       fade_in_duration: task.fade_in_duration,
+      duration_minutes: task.duration_minutes,
       priority: task.priority,
     })
     setShowDialog(true)
@@ -164,6 +211,7 @@ export default function Tasks() {
       playlist_id: playlists.length > 0 ? playlists[0].id : 0,
       volume: 50,
       fade_in_duration: 30,
+      duration_minutes: null,
       priority: 0,
     })
     setEditingTask(null)
@@ -270,6 +318,11 @@ export default function Tasks() {
                     <span>
                       <span className="text-gray-500">渐强:</span> {task.fade_in_duration}秒
                     </span>
+                    {task.duration_minutes && (
+                      <span>
+                        <span className="text-gray-500">时长:</span> {task.duration_minutes}分钟
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -455,6 +508,29 @@ export default function Tasks() {
                   className="w-full"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  播放时长（留空表示播放全部）: {formData.duration_minutes ? `${formData.duration_minutes}分钟` : '播放全部'}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="480"
+                  value={formData.duration_minutes || ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      duration_minutes: e.target.value ? parseInt(e.target.value) : null,
+                    })
+                  }
+                  placeholder="留空表示播放列表全部音频"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  设置播放时长可以避免长时间播放影响下一个任务
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 mt-6">
@@ -469,6 +545,65 @@ export default function Tasks() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 {editingTask ? '保存' : '创建'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 冲突提示对话框 */}
+      {showConflictDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-[500px]">
+            <h3 className="text-xl font-bold mb-4 text-red-800">任务时间冲突</h3>
+            <div className="mb-6">
+              <p className="text-gray-700 mb-4">以下任务与当前任务的时间段有冲突：</p>
+              <ul className="space-y-2">
+                {conflicts.map((conflict) => (
+                  <li key={conflict.task_id} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-red-800">{conflict.task_name}</span>
+                      <span className="text-red-600">
+                        {formatTime(conflict.hour, conflict.minute)}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-gray-600 mt-4 text-sm">
+                请修改当前任务的时间或播放时长，或者调整冲突任务的时间设置。
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowConflictDialog(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                返回修改
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认对话框 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-[480px]">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">确认删除</h3>
+            <p className="text-gray-600 mb-6">确定要删除该定时任务吗？此操作无法撤销。</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={cancelDeleteTask}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDeleteTask}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                删除
               </button>
             </div>
           </div>

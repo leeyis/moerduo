@@ -7,6 +7,11 @@ use rusqlite::Connection;
 use serde::Serialize;
 use std::io::BufReader;
 use rodio::{Decoder, Source};
+use std::fs;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::probe::Hint;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::formats::FormatOptions;
 
 #[derive(Debug, Serialize)]
 pub struct RecordingState {
@@ -16,28 +21,70 @@ pub struct RecordingState {
 
 /// 获取音频文件的真实时长（秒）
 fn get_audio_duration(file_path: &std::path::Path) -> i64 {
-    match std::fs::File::open(file_path) {
+    // 使用 symphonia 获取准确的音频时长
+    match fs::File::open(file_path) {
         Ok(file) => {
-            match Decoder::new(BufReader::new(file)) {
-                Ok(source) => {
-                    // 尝试获取总时长
-                    if let Some(duration) = source.total_duration() {
-                        duration.as_secs() as i64
-                    } else {
-                        // 如果无法获取，返回默认值
-                        180
+            let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+            let mut hint = Hint::new();
+            if let Some(extension) = file_path.extension() {
+                if let Some(ext_str) = extension.to_str() {
+                    hint.with_extension(ext_str);
+                }
+            }
+
+            let format_opts = FormatOptions::default();
+            let metadata_opts = MetadataOptions::default();
+
+            match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
+                Ok(probed) => {
+                    let format = probed.format;
+
+                    // 尝试从默认音轨获取时长
+                    if let Some(track) = format.default_track() {
+                        if let Some(timebase) = track.codec_params.time_base {
+                            if let Some(n_frames) = track.codec_params.n_frames {
+                                // 使用时间基数和帧数计算准确时长
+                                let duration_secs = (n_frames as f64 * timebase.numer as f64)
+                                    / timebase.denom as f64;
+                                return duration_secs.ceil() as i64;
+                            }
+                        }
+
+                        // 如果无法从帧数计算，尝试从采样率和样本数计算
+                        if let Some(sample_rate) = track.codec_params.sample_rate {
+                            if let Some(n_frames) = track.codec_params.n_frames {
+                                let duration_secs = n_frames as f64 / sample_rate as f64;
+                                return duration_secs.ceil() as i64;
+                            }
+                        }
                     }
+
+                    // 如果上述方法都失败，尝试使用 rodio 作为备选
+                    if let Ok(file) = fs::File::open(file_path) {
+                        if let Ok(source) = Decoder::new(BufReader::new(file)) {
+                            if let Some(duration) = source.total_duration() {
+                                return duration.as_secs() as i64;
+                            }
+                        }
+                    }
+
+                    180 // 默认值
                 }
                 Err(_) => {
-                    // 解码失败，返回默认值
-                    180
+                    // symphonia 失败，尝试使用 rodio 作为备选
+                    if let Ok(file) = fs::File::open(file_path) {
+                        if let Ok(source) = Decoder::new(BufReader::new(file)) {
+                            if let Some(duration) = source.total_duration() {
+                                return duration.as_secs() as i64;
+                            }
+                        }
+                    }
+                    180 // 默认值
                 }
             }
         }
-        Err(_) => {
-            // 文件打开失败，返回默认值
-            180
-        }
+        Err(_) => 180 // 文件打开失败，返回默认值
     }
 }
 

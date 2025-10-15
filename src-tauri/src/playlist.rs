@@ -161,3 +161,24 @@ pub async fn remove_from_playlist(
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[tauri::command]
+pub async fn check_playlist_tasks(
+    playlist_id: i64,
+    conn: State<'_, Arc<Mutex<Connection>>>,
+) -> Result<Vec<String>, String> {
+    let conn = conn.lock().await;
+    let mut stmt = conn
+        .prepare(
+            "SELECT name FROM scheduled_tasks WHERE playlist_id = ?1 AND is_enabled = 1"
+        )
+        .map_err(|e| e.to_string())?;
+
+    let task_names: Vec<String> = stmt
+        .query_map([playlist_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(task_names)
+}

@@ -31,7 +31,7 @@ function App() {
             <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
               <div className="p-4 border-b border-gray-200">
                 <h1 className="text-xl font-bold text-gray-800">磨耳朵</h1>
-                <p className="text-xs text-gray-500 mt-1">英语听力训练助手</p>
+                <p className="text-xs text-gray-500 mt-1">定时音频播放软件</p>
               </div>
 
               <nav className="flex-1 p-3">

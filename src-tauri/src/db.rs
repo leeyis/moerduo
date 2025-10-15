@@ -88,6 +88,23 @@ pub fn init_database(db_path: &Path) -> Result<Connection> {
         [],
     )?;
 
+    // 数据库迁移：为 scheduled_tasks 添加 duration_minutes 字段
+    // 检查字段是否存在，如果不存在则添加
+    let column_exists: Result<i64, _> = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('scheduled_tasks') WHERE name='duration_minutes'",
+        [],
+        |row| row.get(0),
+    );
+
+    if let Ok(count) = column_exists {
+        if count == 0 {
+            conn.execute(
+                "ALTER TABLE scheduled_tasks ADD COLUMN duration_minutes INTEGER",
+                [],
+            )?;
+        }
+    }
+
     // 创建播放历史记录表（用于统计和日历展示）
     conn.execute(
         "CREATE TABLE IF NOT EXISTS playback_history (

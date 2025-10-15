@@ -262,7 +262,7 @@ export default function SettingsPage() {
         {/* 关于信息 */}
         <div className="mt-6 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
           <p>磨耳朵 v0.1.0</p>
-          <p className="mt-1">中小学生英语听力训练助手</p>
+          <p className="mt-1">开源免费跨平台定时音频播放软件</p>
         </div>
       </div>
     </div>

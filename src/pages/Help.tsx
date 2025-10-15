@@ -18,7 +18,7 @@ export default function Help() {
           <div className="space-y-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <h3 className="text-xl font-bold text-blue-800 mb-3">快速开始指南</h3>
-              <p className="text-blue-700 mb-4">欢迎使用磨耳朵！按照以下步骤，5分钟即可开始您的英语听力训练之旅：</p>
+              <p className="text-blue-700 mb-4">欢迎使用磨耳朵！按照以下步骤，5分钟即可开始您的定时音频播放之旅：</p>
             </div>
 
             <div className="grid gap-4">
@@ -28,8 +28,8 @@ export default function Help() {
                 </div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-gray-800">上传音频文件</h4>
-                  <p className="text-gray-600">点击"上传音频"按钮，选择MP3、WAV、OGG、FLAC或M4A格式的英语听力材料。支持批量上传和拖拽上传。</p>
-                  <p className="text-sm text-gray-500 mt-1">提示：建议选择语速适中、发音清晰的英语音频。</p>
+                  <p className="text-gray-600">点击"上传音频"按钮，选择MP3、WAV、OGG、FLAC或M4A格式的音频文件。支持批量上传和拖拽上传。</p>
+                  <p className="text-sm text-gray-500 mt-1">提示：可以上传外语学习、有声读物、音乐、提醒等各类音频。</p>
                 </div>
               </div>
 
@@ -39,7 +39,7 @@ export default function Help() {
                 </div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-gray-800">创建播放列表</h4>
-                  <p className="text-gray-600">在播放列表页面创建不同主题的列表，如"早安英语"、"睡前故事"、"单词记忆"等。每个列表可以包含多个音频文件。</p>
+                  <p className="text-gray-600">在播放列表页面创建不同主题的列表，如"晨间闹钟"、"学习提醒"、"睡前音乐"等。每个列表可以包含多个音频文件。</p>
                 </div>
               </div>
 
@@ -49,7 +49,7 @@ export default function Help() {
                 </div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-gray-800">设置定时任务</h4>
-                  <p className="text-gray-600">在定时任务页面创建早晨播放任务，设置适合的播放时间（建议6:30-7:30）。可选择重复模式和工作日/周末。</p>
+                  <p className="text-gray-600">在定时任务页面创建定时播放任务，设置适合的播放时间。可选择重复模式和工作日/周末。</p>
                 </div>
               </div>
 
@@ -58,8 +58,8 @@ export default function Help() {
                   <span className="text-orange-600 font-bold">4</span>
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-semibold text-gray-800">享受学习时光</h4>
-                  <p className="text-gray-600">系统会在设定时间自动播放，帮助孩子在起床时自然地接触英语，培养语感和学习习惯。</p>
+                  <h4 className="font-semibold text-gray-800">开始使用</h4>
+                  <p className="text-gray-600">系统会在设定时间自动播放，帮助您实现个人闹钟、学习提醒、"磨耳朵"等多种需求，养成良好习惯。</p>
                 </div>
               </div>
             </div>
@@ -205,29 +205,29 @@ export default function Help() {
                 </div>
 
                 <div>
-                  <h4 className="font-semibold text-gray-700">适用对象</h4>
+                  <h4 className="font-semibold text-gray-700">适用场景</h4>
                   <ul className="list-disc list-inside text-sm text-gray-600 ml-4 space-y-1">
-                    <li>小学生（6-12岁）</li>
-                    <li>初中生（13-15岁）</li>
-                    <li>高中生（16-18岁）</li>
-                    <li>英语学习者</li>
-                    <li>关注孩子教育的家长</li>
+                    <li>个人闹钟：定时播放音乐、语音提醒</li>
+                    <li>语言学习：外语听力材料定时播放</li>
+                    <li>知识学习：课程音频、有声读物播放</li>
+                    <li>习惯养成：通过定时音频建立作息习惯</li>
+                    <li>家庭教育：为孩子设置学习提醒</li>
                   </ul>
                 </div>
 
                 <div>
                   <h4 className="font-semibold text-gray-700">主要功能</h4>
                   <p className="text-sm text-gray-600 mt-2">
-                    磨耳朵通过定时播放英语音频，帮助学生在日常生活中自然接触英语，
-                    培养语感、提高听力水平、养成良好学习习惯。
+                    磨耳朵是一款开源免费的跨平台定时音频播放软件，通过灵活的定时播放功能，
+                    帮助用户实现个人闹钟、语言学习"磨耳朵"、知识学习等多种需求，养成良好习惯。
                   </p>
                 </div>
 
                 <div>
-                  <h4 className="font-semibold text-gray-700">教育理念</h4>
+                  <h4 className="font-semibold text-gray-700">设计理念</h4>
                   <p className="text-sm text-gray-600 mt-2">
-                    通过"浸入式"学习方法，让学生在无压力的环境中接触英语，
-                    借助建立英语思维模式，提高语言习得效率。
+                    通过"定时提醒+音频播放"的方式，让用户在日常生活中无压力地接收信息，
+                    帮助建立良好的作息和学习习惯，提高时间管理效率。
                   </p>
                 </div>
 

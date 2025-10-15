@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Moerduo (磨耳朵) is a cross-platform desktop application for timed English listening practice, built with Tauri, React, and Rust. The app allows students to schedule audio playback for language learning.
+Moerduo (磨耳朵) is an open-source, free, cross-platform scheduled audio playback application, built with Tauri, React, and Rust. Use cases include personal alarms, parents scheduling audio playback for children's "listening immersion" to aid memory and learning, and more.
 
 ## Tech Stack
 

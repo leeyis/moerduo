@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, List as ListIcon, Shuffle, Repeat, Repeat1, Music, Play, PlayCircle } from 'lucide-react'
+import { Plus, Trash2, List as ListIcon, Shuffle, Repeat, Repeat1, Music, Play, PlayCircle, SkipBack, SkipForward, Pause } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { usePlayer } from '../contexts/PlayerContext'
 
@@ -40,7 +40,8 @@ export default function Playlists() {
   const [selectedAudios, setSelectedAudios] = useState<Set<number>>(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [playlistToDelete, setPlaylistToDelete] = useState<number | null>(null)
-  const { playAudio, isPlaying, currentAudio } = usePlayer()
+  const [tasksUsingPlaylist, setTasksUsingPlaylist] = useState<string[]>([])
+  const { playAudio, isPlaying, currentAudio, playNext, playPrevious, currentIndex, totalCount } = usePlayer()
 
   useEffect(() => {
     loadPlaylists()
@@ -84,9 +85,17 @@ export default function Playlists() {
   }
 
   const handleDeletePlaylist = async (id: number) => {
-    // 显示自定义确认对话框
-    setPlaylistToDelete(id)
-    setShowDeleteConfirm(true)
+    try {
+      // 检查是否有定时任务引用此播放列表
+      const taskNames = await invoke<string[]>('check_playlist_tasks', { playlistId: id })
+
+      setPlaylistToDelete(id)
+      setTasksUsingPlaylist(taskNames)
+      setShowDeleteConfirm(true)
+    } catch (error) {
+      console.error('检查任务失败:', error)
+      alert('检查任务失败: ' + error)
+    }
   }
 
   const confirmDelete = async () => {
@@ -110,6 +119,7 @@ export default function Playlists() {
   const cancelDelete = () => {
     setShowDeleteConfirm(false)
     setPlaylistToDelete(null)
+    setTasksUsingPlaylist([])
   }
 
   const handleSetPlayMode = async (mode: string) => {
@@ -179,7 +189,9 @@ export default function Playlists() {
 
   const handlePlayItem = async (item: PlaylistItem) => {
     try {
-      await playAudio(item.audio_id, item.audio_name)
+      // 构建音频列表（按播放列表中的顺序）
+      const audioList = playlistItems.map(i => ({ id: i.audio_id, name: i.audio_name }))
+      await playAudio(item.audio_id, item.audio_name, audioList)
     } catch (error) {
       console.error('播放失败:', error)
       alert('播放失败: ' + error)
@@ -227,8 +239,13 @@ export default function Playlists() {
   }
 
   const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
+
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    }
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
@@ -344,7 +361,7 @@ export default function Playlists() {
                       <th className="pb-3 w-16">#</th>
                       <th className="pb-3">音频名称</th>
                       <th className="pb-3 w-24">时长</th>
-                      <th className="pb-3 w-32">操作</th>
+                      <th className="pb-3 w-40">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -377,13 +394,45 @@ export default function Playlists() {
                           <td className="py-3 text-gray-600">{formatDuration(item.duration)}</td>
                           <td className="py-3">
                             <div className="flex gap-1">
-                              <button
-                                onClick={() => handlePlayItem(item)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="播放"
-                              >
-                                <Play size={16} />
-                              </button>
+                              {currentAudio && currentAudio.id === item.audio_id && isPlaying ? (
+                                <>
+                                  <button
+                                    onClick={() => playPrevious()}
+                                    disabled={currentIndex <= 0}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-30"
+                                    title="上一个"
+                                  >
+                                    <SkipBack size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => handlePlayItem(item)}
+                                    className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                    title="暂停"
+                                  >
+                                    <Pause size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => playNext()}
+                                    disabled={currentIndex >= totalCount - 1}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-30"
+                                    title="下一个"
+                                  >
+                                    <SkipForward size={16} />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => handlePlayItem(item)}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    currentAudio && currentAudio.id === item.audio_id
+                                      ? 'text-blue-600 hover:bg-blue-50'
+                                      : 'text-blue-600 hover:bg-blue-50'
+                                  }`}
+                                  title={currentAudio && currentAudio.id === item.audio_id ? '继续播放' : '播放'}
+                                >
+                                  <Play size={16} />
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleRemoveFromPlaylist(item.id)}
                                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -414,9 +463,27 @@ export default function Playlists() {
       {/* 删除确认对话框 */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
+          <div className="bg-white rounded-lg p-6 w-[480px]">
             <h3 className="text-xl font-bold mb-4 text-gray-800">确认删除</h3>
-            <p className="text-gray-600 mb-6">确定要删除该播放列表吗？此操作无法撤销。</p>
+
+            {tasksUsingPlaylist.length > 0 ? (
+              <>
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 font-medium mb-2">⚠️ 警告：以下定时任务正在使用此播放列表</p>
+                  <ul className="list-disc ml-6 text-red-600">
+                    {tasksUsingPlaylist.map((taskName, idx) => (
+                      <li key={idx}>{taskName}</li>
+                    ))}
+                  </ul>
+                </div>
+                <p className="text-gray-600 mb-6">
+                  删除此播放列表将影响这些定时任务的执行。确定要继续删除吗？
+                </p>
+              </>
+            ) : (
+              <p className="text-gray-600 mb-6">确定要删除该播放列表吗？此操作无法撤销。</p>
+            )}
+
             <div className="flex justify-end gap-2">
               <button
                 onClick={cancelDelete}
@@ -426,9 +493,13 @@ export default function Playlists() {
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                className={`px-4 py-2 text-white rounded-lg transition-colors ${
+                  tasksUsingPlaylist.length > 0
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                删除
+                {tasksUsingPlaylist.length > 0 ? '确认删除' : '删除'}
               </button>
             </div>
           </div>
