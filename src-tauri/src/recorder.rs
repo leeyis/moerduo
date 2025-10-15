@@ -1,4 +1,3 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -13,125 +12,38 @@ pub struct RecordingState {
     pub duration: f32,
 }
 
+// 简化的录音器，不存储Stream对象
 pub struct AudioRecorder {
-    writer: Option<Arc<StdMutex<WavWriter<std::io::BufWriter<std::fs::File>>>>>,
-    stream: Option<cpal::Stream>,
-    is_recording: bool,
-    output_path: Option<PathBuf>,
+    is_recording: Arc<StdMutex<bool>>,
+    output_path: Arc<StdMutex<Option<PathBuf>>>,
 }
+
+// 手动实现Send和Sync
+unsafe impl Send for AudioRecorder {}
+unsafe impl Sync for AudioRecorder {}
 
 impl AudioRecorder {
     pub fn new() -> Self {
         AudioRecorder {
-            writer: None,
-            stream: None,
-            is_recording: false,
-            output_path: None,
+            is_recording: Arc::new(StdMutex::new(false)),
+            output_path: Arc::new(StdMutex::new(None)),
         }
-    }
-
-    pub fn start_recording(&mut self, output_path: PathBuf) -> Result<(), String> {
-        if self.is_recording {
-            return Err("已经在录音中".to_string());
-        }
-
-        // 获取默认音频输入设备
-        let host = cpal::default_host();
-        let device = host
-            .default_input_device()
-            .ok_or("没有找到音频输入设备".to_string())?;
-
-        let config = device
-            .default_input_config()
-            .map_err(|e| format!("获取输入配置失败: {}", e))?;
-
-        // 创建WAV文件
-        let spec = WavSpec {
-            channels: config.channels(),
-            sample_rate: config.sample_rate().0,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
-        };
-
-        let writer = WavWriter::create(&output_path, spec)
-            .map_err(|e| format!("创建WAV文件失败: {}", e))?;
-
-        let writer = Arc::new(StdMutex::new(writer));
-        let writer_clone = Arc::clone(&writer);
-
-        // 创建音频流
-        let stream = match config.sample_format() {
-            cpal::SampleFormat::F32 => self.build_stream::<f32>(&device, &config.into(), writer_clone),
-            cpal::SampleFormat::I16 => self.build_stream::<i16>(&device, &config.into(), writer_clone),
-            cpal::SampleFormat::U16 => self.build_stream::<u16>(&device, &config.into(), writer_clone),
-            _ => return Err("不支持的采样格式".to_string()),
-        }?;
-
-        stream.play().map_err(|e| format!("启动录音失败: {}", e))?;
-
-        self.writer = Some(writer);
-        self.stream = Some(stream);
-        self.is_recording = true;
-        self.output_path = Some(output_path);
-
-        Ok(())
-    }
-
-    fn build_stream<T>(
-        &self,
-        device: &cpal::Device,
-        config: &cpal::StreamConfig,
-        writer: Arc<StdMutex<WavWriter<std::io::BufWriter<std::fs::File>>>>,
-    ) -> Result<cpal::Stream, String>
-    where
-        T: cpal::Sample + hound::Sample,
-    {
-        let err_fn = |err| eprintln!("录音流错误: {}", err);
-
-        let stream = device
-            .build_input_stream(
-                config,
-                move |data: &[T], _: &cpal::InputCallbackInfo| {
-                    if let Ok(mut writer_guard) = writer.lock() {
-                        for &sample in data {
-                            if let Err(e) = writer_guard.write_sample(sample) {
-                                eprintln!("写入采样失败: {}", e);
-                            }
-                        }
-                    }
-                },
-                err_fn,
-                None,
-            )
-            .map_err(|e| format!("创建录音流失败: {}", e))?;
-
-        Ok(stream)
-    }
-
-    pub fn stop_recording(&mut self) -> Result<PathBuf, String> {
-        if !self.is_recording {
-            return Err("未在录音中".to_string());
-        }
-
-        // 停止流
-        if let Some(stream) = self.stream.take() {
-            drop(stream);
-        }
-
-        // 关闭writer
-        if let Some(writer) = self.writer.take() {
-            let writer_guard = writer.lock().unwrap();
-            writer_guard.finalize().map_err(|e| format!("完成WAV文件失败: {}", e))?;
-        }
-
-        self.is_recording = false;
-
-        let output_path = self.output_path.take().ok_or("录音文件路径丢失".to_string())?;
-        Ok(output_path)
     }
 
     pub fn is_recording(&self) -> bool {
-        self.is_recording
+        *self.is_recording.lock().unwrap()
+    }
+
+    pub fn set_recording(&self, recording: bool) {
+        *self.is_recording.lock().unwrap() = recording;
+    }
+
+    pub fn get_output_path(&self) -> Option<PathBuf> {
+        self.output_path.lock().unwrap().clone()
+    }
+
+    pub fn set_output_path(&self, path: Option<PathBuf>) {
+        *self.output_path.lock().unwrap() = path;
     }
 }
 
@@ -141,10 +53,153 @@ pub async fn start_recording(
     audio_dir: State<'_, PathBuf>,
     recorder: State<'_, Arc<Mutex<AudioRecorder>>>,
 ) -> Result<String, String> {
-    let output_path = audio_dir.join(format!("{}.wav", filename));
+    let recorder = recorder.lock().await;
 
-    let mut recorder = recorder.lock().await;
-    recorder.start_recording(output_path.clone())?;
+    if recorder.is_recording() {
+        return Err("已经在录音中".to_string());
+    }
+
+    let output_path = audio_dir.join(format!("{}.wav", filename));
+    recorder.set_output_path(Some(output_path.clone()));
+    recorder.set_recording(true);
+
+    // 在后台线程中进行录音
+    let output_path_clone = output_path.clone();
+    let is_recording = Arc::clone(&recorder.is_recording);
+
+    std::thread::spawn(move || {
+        use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+
+        // 获取默认音频输入设备
+        let host = match cpal::default_host() {
+            host => host,
+        };
+
+        let device = match host.default_input_device() {
+            Some(device) => device,
+            None => {
+                eprintln!("没有找到音频输入设备");
+                return;
+            }
+        };
+
+        let config = match device.default_input_config() {
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("获取输入配置失败: {}", e);
+                return;
+            }
+        };
+
+        // 创建WAV文件
+        let spec = WavSpec {
+            channels: config.channels(),
+            sample_rate: config.sample_rate().0,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+
+        let writer = match WavWriter::create(&output_path_clone, spec) {
+            Ok(writer) => Arc::new(StdMutex::new(writer)),
+            Err(e) => {
+                eprintln!("创建WAV文件失败: {}", e);
+                return;
+            }
+        };
+
+        let writer_clone = Arc::clone(&writer);
+        let is_recording_clone = Arc::clone(&is_recording);
+
+        let err_fn = |err| eprintln!("录音流错误: {}", err);
+
+        // 构建录音流
+        let stream = match config.sample_format() {
+            cpal::SampleFormat::F32 => {
+                device.build_input_stream(
+                    &config.into(),
+                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                        if !*is_recording_clone.lock().unwrap() {
+                            return;
+                        }
+                        if let Ok(mut writer_guard) = writer_clone.lock() {
+                            for &sample in data {
+                                let sample_i16 = (sample * i16::MAX as f32) as i16;
+                                let _ = writer_guard.write_sample(sample_i16);
+                            }
+                        }
+                    },
+                    err_fn,
+                    None,
+                )
+            }
+            cpal::SampleFormat::I16 => {
+                device.build_input_stream(
+                    &config.into(),
+                    move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                        if !*is_recording_clone.lock().unwrap() {
+                            return;
+                        }
+                        if let Ok(mut writer_guard) = writer_clone.lock() {
+                            for &sample in data {
+                                let _ = writer_guard.write_sample(sample);
+                            }
+                        }
+                    },
+                    err_fn,
+                    None,
+                )
+            }
+            cpal::SampleFormat::U16 => {
+                device.build_input_stream(
+                    &config.into(),
+                    move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                        if !*is_recording_clone.lock().unwrap() {
+                            return;
+                        }
+                        if let Ok(mut writer_guard) = writer_clone.lock() {
+                            for &sample in data {
+                                let sample_i16 = (sample as i32 - 32768) as i16;
+                                let _ = writer_guard.write_sample(sample_i16);
+                            }
+                        }
+                    },
+                    err_fn,
+                    None,
+                )
+            }
+            _ => {
+                eprintln!("不支持的采样格式");
+                return;
+            }
+        };
+
+        let stream = match stream {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("创建录音流失败: {}", e);
+                return;
+            }
+        };
+
+        if let Err(e) = stream.play() {
+            eprintln!("启动录音失败: {}", e);
+            return;
+        }
+
+        // 保持流存活，直到停止录音
+        while *is_recording.lock().unwrap() {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        drop(stream);
+
+        // 完成WAV文件写入
+        if let Ok(writer_mutex) = Arc::try_unwrap(writer) {
+            if let Ok(writer) = writer_mutex.into_inner() {
+                let _ = writer.finalize();
+            }
+        }
+    });
 
     Ok(output_path.to_string_lossy().to_string())
 }
@@ -155,10 +210,21 @@ pub async fn stop_recording(
     conn: State<'_, Arc<Mutex<Connection>>>,
     audio_dir: State<'_, PathBuf>,
 ) -> Result<i64, String> {
-    let output_path = {
-        let mut recorder = recorder.lock().await;
-        recorder.stop_recording()?
-    };
+    let recorder = recorder.lock().await;
+
+    if !recorder.is_recording() {
+        return Err("未在录音中".to_string());
+    }
+
+    recorder.set_recording(false);
+
+    // 等待录音线程完成
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    let output_path = recorder.get_output_path()
+        .ok_or("录音文件路径丢失".to_string())?;
+
+    recorder.set_output_path(None);
 
     // 获取文件信息
     let metadata = std::fs::metadata(&output_path)
@@ -212,6 +278,6 @@ pub async fn get_recording_state(
     let recorder = recorder.lock().await;
     Ok(RecordingState {
         is_recording: recorder.is_recording(),
-        duration: 0.0, // 可以后续添加录音时长追踪
+        duration: 0.0,
     })
 }
