@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: 249 250 251;
+  --bg-secondary: 241 243 245;
+  --text-primary: 17 24 39;
+  --text-secondary: 107 114 128;
+  --border-primary: 229 231 235;
+  --text-muted: 161 161 170;
+  --bg-muted: 241 243 245;
+  --bg-accent: 59 130 246;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg-primary: 255 255 255;
+  --bg-secondary: 249 250 251;
+  --text-primary: 17 24 39;
+  --text-secondary: 107 114 128;
+  --border-primary: 229 231 235;
+  --text-muted: 161 161 170;
+  --bg-muted: 241 243 245;
+  --bg-accent: 59 130 246;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --bg-primary: 17 24 39;
+  --bg-secondary: 31 41 55;
+  --text-primary: 249 250 251;
+  --text-secondary: 209 213 219;
+  --border-primary: 55 65 81;
+  --text-muted: 163 163 170;
+  --bg-muted: 31 41 55;
+  --bg-accent: 34 211 238;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
