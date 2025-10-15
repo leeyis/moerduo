@@ -1,5 +1,4 @@
 use auto_launch::AutoLaunchBuilder;
-use tauri::api::path::config_dir;
 use std::path::PathBuf;
 
 pub fn get_app_path() -> Result<PathBuf, String> {
