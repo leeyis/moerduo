@@ -32,7 +32,12 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     try {
+      // 保存普通设置
       await invoke('save_settings', { settings })
+
+      // 单独处理开机自启动
+      await invoke('set_auto_launch', { enable: settings.auto_start })
+
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (error) {

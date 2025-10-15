@@ -24,6 +24,7 @@ anyhow = "1.0"
 uuid = { version = "1.6", features = ["v4"] }
 cpal = "0.15"
 hound = "3.5"
+auto-launch = "0.5"
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem

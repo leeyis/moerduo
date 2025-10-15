@@ -10,6 +10,7 @@ mod scheduler;
 mod stats;
 mod settings;
 mod recorder;
+mod autostart;
 
 use tauri::{Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem, CustomMenuItem};
 use std::sync::Arc;
@@ -136,6 +137,8 @@ fn main() {
             recorder::start_recording,
             recorder::stop_recording,
             recorder::get_recording_state,
+            autostart::get_auto_launch_status,
+            autostart::set_auto_launch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
