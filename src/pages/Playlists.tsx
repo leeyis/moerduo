@@ -38,6 +38,8 @@ export default function Playlists() {
   const [showAddAudioDialog, setShowAddAudioDialog] = useState(false)
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedAudios, setSelectedAudios] = useState<Set<number>>(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [playlistToDelete, setPlaylistToDelete] = useState<number | null>(null)
   const { playAudio, isPlaying, currentAudio } = usePlayer()
 
   useEffect(() => {
@@ -82,18 +84,32 @@ export default function Playlists() {
   }
 
   const handleDeletePlaylist = async (id: number) => {
-    if (!confirm('确定删除该播放列表吗？')) return
+    // 显示自定义确认对话框
+    setPlaylistToDelete(id)
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDelete = async () => {
+    if (playlistToDelete === null) return
 
     try {
-      await invoke('delete_playlist', { id })
-      if (selectedPlaylist === id) {
+      await invoke('delete_playlist', { id: playlistToDelete })
+      if (selectedPlaylist === playlistToDelete) {
         setSelectedPlaylist(null)
         setPlaylistItems([])
       }
       loadPlaylists()
+      setShowDeleteConfirm(false)
+      setPlaylistToDelete(null)
     } catch (error) {
       console.error('删除播放列表失败:', error)
+      alert('删除失败: ' + error)
     }
+  }
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false)
+    setPlaylistToDelete(null)
   }
 
   const handleSetPlayMode = async (mode: string) => {
@@ -394,6 +410,30 @@ export default function Playlists() {
           </div>
         )}
       </div>
+
+      {/* 删除确认对话框 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">确认删除</h3>
+            <p className="text-gray-600 mb-6">确定要删除该播放列表吗？此操作无法撤销。</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={cancelDelete}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新建播放列表对话框 */}
       {showNewDialog && (
