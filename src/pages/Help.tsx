@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Book, Clock, List, Music, Settings, Play, Upload, Trash2, HelpCircle, ChevronRight } from 'lucide-react'
+import { Book, Clock, List, Music, Settings, Play, HelpCircle, ChevronRight } from 'lucide-react'
 
 export default function Help() {
   const [activeSection, setActiveSection] = useState('start')

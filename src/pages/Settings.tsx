@@ -1,34 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Save, FolderOpen, Moon, Sun, Volume2, Download, Upload } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { open } from '@tauri-apps/api/dialog'
 import { useTheme } from '../hooks/useTheme'
 
-interface AppSettings {
-  auto_start: boolean
-  minimize_to_tray: boolean
-  default_volume: number
-  theme: string
-  audio_path: string | null
-}
-
 export default function SettingsPage() {
-  const { settings, setSettings, saveSettings } = useTheme()
+  const { settings, setSettings } = useTheme()
   const [saved, setSaved] = useState(false)
-  const [dataUsage, setDataUsage] = useState({ database_size: 2345678, audio_files_count: 0, audio_files_size: 0 })
-
-  useEffect(() => {
-    loadDataUsage()
-  }, [])
-
-  const loadDataUsage = async () => {
-    try {
-      const usage = await invoke('get_data_usage')
-      setDataUsage(usage)
-    } catch (error) {
-      console.error('加载数据统计失败:', error)
-    }
-  }
 
   const handleSave = async () => {
     try {
@@ -60,7 +38,8 @@ export default function SettingsPage() {
     try {
       const result = await invoke<string>('import_config')
       alert(result)
-      await loadSettings() // 重新加载设置
+      // Reload page to get updated settings
+      window.location.reload()
     } catch (error) {
       console.error('导入失败:', error)
       alert('导入失败: ' + error)
@@ -82,12 +61,6 @@ export default function SettingsPage() {
       console.error('选择路径失败:', error)
       alert('选择路径失败: ' + error)
     }
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
   return (

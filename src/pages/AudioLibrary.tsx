@@ -390,62 +390,82 @@ export default function AudioLibrary() {
                 .filter(file =>
                   file.original_name.toLowerCase().includes(searchTerm.toLowerCase())
                 )
-                .map((file) => (
-                  <tr
-                    key={file.id}
-                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedFiles.has(file.id)}
-                        onChange={() => toggleSelection(file.id)}
-                        className="w-4 h-4"
-                      />
-                    </td>
-                    <td className="py-3 text-gray-800">{file.original_name}</td>
-                    <td className="py-3 text-gray-600">{formatFileSize(file.file_size)}</td>
-                    <td className="py-3 text-gray-600">{formatDuration(file.duration)}</td>
-                    <td className="py-3 text-gray-600 uppercase">{file.format}</td>
-                    <td className="py-3 text-gray-600">
-                      {new Date(file.upload_date).toLocaleDateString('zh-CN')}
-                    </td>
-                    <td className="py-3">
-                      <div className="flex gap-1">
-                        {currentAudio && currentAudio.id === file.id && isPlaying ? (
-                          <>
+                .map((file) => {
+                  const isCurrentlyPlaying = currentAudio && currentAudio.id === file.id && isPlaying
+                  return (
+                    <tr
+                      key={file.id}
+                      className={`border-b border-gray-100 transition-colors ${
+                        isCurrentlyPlaying
+                          ? 'bg-blue-50 hover:bg-blue-100'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <td className="py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedFiles.has(file.id)}
+                          onChange={() => toggleSelection(file.id)}
+                          className="w-4 h-4"
+                        />
+                      </td>
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          {isCurrentlyPlaying && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                              <div className="w-1 h-4 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                              <div className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                            </div>
+                          )}
+                          <span className={isCurrentlyPlaying ? 'text-blue-700 font-medium' : 'text-gray-800'}>
+                            {file.original_name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 text-gray-600">{formatFileSize(file.file_size)}</td>
+                      <td className="py-3 text-gray-600">{formatDuration(file.duration)}</td>
+                      <td className="py-3 text-gray-600 uppercase">{file.format}</td>
+                      <td className="py-3 text-gray-600">
+                        {new Date(file.upload_date).toLocaleDateString('zh-CN')}
+                      </td>
+                      <td className="py-3">
+                        <div className="flex gap-1">
+                          {currentAudio && currentAudio.id === file.id && isPlaying ? (
+                            <>
+                              <button
+                                onClick={() => handlePlay(file)}
+                                className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                title="暂停"
+                              >
+                                <Pause size={16} />
+                              </button>
+                              <button
+                                onClick={handleStopCurrent}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="停止"
+                              >
+                                <Square size={16} />
+                              </button>
+                            </>
+                          ) : (
                             <button
                               onClick={() => handlePlay(file)}
-                              className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                              title="暂停"
+                              className={`p-2 rounded-lg transition-colors ${
+                                currentAudio && currentAudio.id === file.id
+                                  ? 'text-blue-600 hover:bg-blue-50'
+                                  : 'text-blue-600 hover:bg-blue-50'
+                              }`}
+                              title={currentAudio && currentAudio.id === file.id ? '继续播放' : '播放'}
                             >
-                              <Pause size={16} />
+                              <Play size={16} />
                             </button>
-                            <button
-                              onClick={handleStopCurrent}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="停止"
-                            >
-                              <Square size={16} />
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => handlePlay(file)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              currentAudio && currentAudio.id === file.id
-                                ? 'text-blue-600 hover:bg-blue-50'
-                                : 'text-blue-600 hover:bg-blue-50'
-                            }`}
-                            title={currentAudio && currentAudio.id === file.id ? '继续播放' : '播放'}
-                          >
-                            <Play size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
             </tbody>
           </table>
         )}

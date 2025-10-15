@@ -96,7 +96,7 @@ pub async fn get_audio_files(
 ) -> Result<Vec<AudioFile>, String> {
     let conn = conn.lock().await;
     let mut stmt = conn
-        .prepare("SELECT id, filename, original_name, file_path, file_size, duration, format, upload_date, play_count, last_played FROM audio_files ORDER BY upload_date DESC")
+        .prepare("SELECT id, filename, original_name, file_path, file_size, duration, format, upload_date, play_count, last_played FROM audio_files ORDER BY id DESC")
         .map_err(|e| e.to_string())?;
 
     let files = stmt

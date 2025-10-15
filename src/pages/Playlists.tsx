@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, List as ListIcon, Shuffle, Repeat, Repeat1, Music, Play, PlayCircle } from 'lucide-react'
+import { Plus, Trash2, List as ListIcon, Shuffle, Repeat, Repeat1, Music, Play, PlayCircle } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { usePlayer } from '../contexts/PlayerContext'
 

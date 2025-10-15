@@ -59,7 +59,12 @@ pub async fn start_recording(
         return Err("已经在录音中".to_string());
     }
 
-    let output_path = audio_dir.join(format!("{}.wav", filename));
+    // 创建rec子目录用于存放录音文件
+    let rec_dir = audio_dir.join("rec");
+    std::fs::create_dir_all(&rec_dir)
+        .map_err(|e| format!("创建录音目录失败: {}", e))?;
+
+    let output_path = rec_dir.join(format!("{}.wav", filename));
     recorder.set_output_path(Some(output_path.clone()));
     recorder.set_recording(true);
 
@@ -243,7 +248,7 @@ pub async fn stop_recording(
         uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
     );
 
-    // 将文件重命名为标准格式
+    // 将文件重命名为标准格式（移动到主audio目录）
     let dest_path = audio_dir.join(&filename);
     std::fs::rename(&output_path, &dest_path)
         .map_err(|e| format!("重命名文件失败: {}", e))?;

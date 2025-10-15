@@ -9,11 +9,9 @@ import SettingsPage from './pages/Settings'
 import Help from './pages/Help'
 import PlayController from './components/PlayController'
 import { PlayerProvider } from './contexts/PlayerContext'
-import { useTheme } from './hooks/useTheme'
 
 function App() {
   const [activeTab, setActiveTab] = useState('audio')
-  const { settings } = useTheme()
 
   const menuItems = [
     { id: 'audio', label: '音频库', icon: Music, path: '/' },
