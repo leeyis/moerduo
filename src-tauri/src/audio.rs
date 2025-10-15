@@ -3,11 +3,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use rusqlite::Connection;
-use tauri::State;
+use tauri::{State, AppHandle, Manager};
 use anyhow::Result;
 use std::fs;
 use std::io::BufReader;
+use std::process::Command;
 use rodio::{Decoder, Source};
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::probe::Hint;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::formats::FormatOptions;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioFile {
@@ -25,28 +30,70 @@ pub struct AudioFile {
 
 /// 获取音频文件的真实时长（秒）
 fn get_audio_duration(file_path: &std::path::Path) -> i64 {
+    // 使用 symphonia 获取准确的音频时长
     match fs::File::open(file_path) {
         Ok(file) => {
-            match Decoder::new(BufReader::new(file)) {
-                Ok(source) => {
-                    // 尝试获取总时长
-                    if let Some(duration) = source.total_duration() {
-                        duration.as_secs() as i64
-                    } else {
-                        // 如果无法获取，返回默认值
-                        180
+            let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+            let mut hint = Hint::new();
+            if let Some(extension) = file_path.extension() {
+                if let Some(ext_str) = extension.to_str() {
+                    hint.with_extension(ext_str);
+                }
+            }
+
+            let format_opts = FormatOptions::default();
+            let metadata_opts = MetadataOptions::default();
+
+            match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
+                Ok(probed) => {
+                    let format = probed.format;
+
+                    // 尝试从默认音轨获取时长
+                    if let Some(track) = format.default_track() {
+                        if let Some(timebase) = track.codec_params.time_base {
+                            if let Some(n_frames) = track.codec_params.n_frames {
+                                // 使用时间基数和帧数计算准确时长
+                                let duration_secs = (n_frames as f64 * timebase.numer as f64)
+                                    / timebase.denom as f64;
+                                return duration_secs.ceil() as i64;
+                            }
+                        }
+
+                        // 如果无法从帧数计算，尝试从采样率和样本数计算
+                        if let Some(sample_rate) = track.codec_params.sample_rate {
+                            if let Some(n_frames) = track.codec_params.n_frames {
+                                let duration_secs = n_frames as f64 / sample_rate as f64;
+                                return duration_secs.ceil() as i64;
+                            }
+                        }
                     }
+
+                    // 如果上述方法都失败，尝试使用 rodio 作为备选
+                    if let Ok(file) = fs::File::open(file_path) {
+                        if let Ok(source) = Decoder::new(BufReader::new(file)) {
+                            if let Some(duration) = source.total_duration() {
+                                return duration.as_secs() as i64;
+                            }
+                        }
+                    }
+
+                    180 // 默认值
                 }
                 Err(_) => {
-                    // 解码失败，返回默认值
-                    180
+                    // symphonia 失败，尝试使用 rodio 作为备选
+                    if let Ok(file) = fs::File::open(file_path) {
+                        if let Ok(source) = Decoder::new(BufReader::new(file)) {
+                            if let Some(duration) = source.total_duration() {
+                                return duration.as_secs() as i64;
+                            }
+                        }
+                    }
+                    180 // 默认值
                 }
             }
         }
-        Err(_) => {
-            // 文件打开失败，返回默认值
-            180
-        }
+        Err(_) => 180 // 文件打开失败，返回默认值
     }
 }
 
@@ -327,4 +374,116 @@ pub async fn scan_audio_directory(
         skipped_files,
         error_files,
     })
+}
+
+/// 检查FFmpeg是否可用
+fn check_ffmpeg_available() -> bool {
+    Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// 从视频文件提取音频（使用FFmpeg命令行）
+#[tauri::command]
+pub async fn extract_audio_from_video(
+    video_path: String,
+    output_filename: String,
+    app: AppHandle,
+    conn: State<'_, Arc<Mutex<Connection>>>,
+    audio_dir: State<'_, PathBuf>,
+) -> Result<String, String> {
+    // 检查FFmpeg是否可用
+    if !check_ffmpeg_available() {
+        return Err("FFmpeg未安装或不在PATH中。请安装FFmpeg后重试。\n安装方法：\n1. Windows: 从 https://ffmpeg.org/download.html 下载并添加到PATH\n2. macOS: brew install ffmpeg\n3. Linux: sudo apt install ffmpeg".to_string());
+    }
+
+    let input_path = PathBuf::from(&video_path);
+    if !input_path.exists() {
+        return Err("视频文件不存在".to_string());
+    }
+
+    // 生成输出文件名
+    let filename = if output_filename.is_empty() {
+        let now = chrono::Local::now();
+        format!(
+            "{}_{}.mp3",
+            now.format("%Y%m%d_%H%M%S"),
+            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+        )
+    } else {
+        format!("{}.mp3", output_filename)
+    };
+
+    let output_path = audio_dir.join(&filename);
+
+    // 发送进度开始事件
+    app.emit_all("extract-progress", 0u8).map_err(|e| e.to_string())?;
+
+    // 构建FFmpeg命令
+    let mut cmd = Command::new("ffmpeg");
+    cmd
+        .arg("-i") // 输入文件
+        .arg(&video_path)
+        .arg("-vn") // 不要视频
+        .arg("-acodec") // 音频编码器
+        .arg("libmp3lame") // MP3编码器
+        .arg("-ab") // 音频比特率
+        .arg("128k") // 128kbps
+        .arg("-ar") // 音频采样率
+        .arg("44100") // 44.1kHz
+        .arg("-ac") // 音频声道数
+        .arg("2") // 立体声
+        .arg("-y") // 覆盖输出文件
+        .arg(output_path.to_str().unwrap());
+
+    // 发送进度 10%
+    app.emit_all("extract-progress", 10u8).map_err(|e| e.to_string())?;
+
+    // 执行FFmpeg命令
+    let output = cmd.output().map_err(|e| format!("执行FFmpeg命令失败: {}", e))?;
+
+    // 发送进度 90%
+    app.emit_all("extract-progress", 90u8).map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("FFmpeg执行失败: {}", error_msg));
+    }
+
+    // 检查输出文件是否存在
+    if !output_path.exists() {
+        return Err("音频提取失败：输出文件不存在".to_string());
+    }
+
+    // 发送完成进度
+    app.emit_all("extract-progress", 100u8).map_err(|e| e.to_string())?;
+
+    // 获取输出文件信息
+    let metadata = std::fs::metadata(&output_path)
+        .map_err(|e| format!("无法获取输出文件信息: {}", e))?;
+    let file_size = metadata.len() as i64;
+
+    // 获取音频时长
+    let duration = get_audio_duration(&output_path);
+
+    // 保存到数据库
+    let conn = conn.lock().await;
+    conn.execute(
+        "INSERT INTO audio_files (filename, original_name, file_path, file_size, duration, format, upload_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        (
+            &filename,
+            &filename,
+            output_path.to_str().unwrap(),
+            file_size,
+            duration,
+            "mp3",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        ),
+    )
+    .map_err(|e| format!("保存到数据库失败: {}", e))?;
+
+    Ok(filename)
 }

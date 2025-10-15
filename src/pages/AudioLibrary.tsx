@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Upload, Trash2, Play, Pause, Square, Search, Music, RefreshCw, Mic } from 'lucide-react'
+import { Upload, Trash2, Play, Pause, Square, Search, Music, RefreshCw, Mic, SkipBack, SkipForward, Film, Loader2 } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { open } from '@tauri-apps/api/dialog'
 import { listen } from '@tauri-apps/api/event'
@@ -20,13 +20,17 @@ export default function AudioLibrary() {
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedFiles, setSelectedFiles] = useState<Set<number>>(new Set())
   const [searchTerm, setSearchTerm] = useState('')
-  const { isPlaying, currentAudio, playAudio, pauseAudio, stopAudio } = usePlayer()
+  const { isPlaying, currentAudio, playAudio, pauseAudio, stopAudio, playNext, playPrevious, currentIndex, totalCount } = usePlayer()
   const [isDragging, setIsDragging] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showRecordDialog, setShowRecordDialog] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingFilename, setRecordingFilename] = useState('')
+  const [showExtractDialog, setShowExtractDialog] = useState(false)
+  const [isExtracting, setIsExtracting] = useState(false)
+  const [extractProgress, setExtractProgress] = useState(0)
+  const [extractedFilename, setExtractedFilename] = useState('')
 
   const handleUpload = async () => {
     try {
@@ -155,18 +159,76 @@ export default function AudioLibrary() {
     }
   }
 
+  const handleOpenExtractDialog = () => {
+    setExtractedFilename('')
+    setExtractProgress(0)
+    setShowExtractDialog(true)
+  }
+
+  const handleExtractAudio = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'Video',
+          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp']
+        }]
+      })
+
+      if (selected && !Array.isArray(selected)) {
+        setIsExtracting(true)
+        setExtractProgress(0)
+
+        // 监听提取进度
+        const unlisten = listen<number>('extract-progress', (event) => {
+          setExtractProgress(event.payload)
+        })
+
+        try {
+          const filename = extractedFilename.trim() || 'extracted_audio'
+          const result = await invoke<string>('extract_audio_from_video', {
+            videoPath: selected,
+            outputFilename: filename
+          })
+
+          setIsExtracting(false)
+          setExtractProgress(100)
+          setShowExtractDialog(false)
+          alert(`音频提取成功！\n文件名：${result}`)
+          await loadAudioFiles()
+        } catch (error) {
+          setIsExtracting(false)
+          console.error('音频提取失败:', error)
+          alert('音频提取失败: ' + error)
+        } finally {
+          unlisten.then(fn => fn())
+        }
+      }
+    } catch (error) {
+      setIsExtracting(false)
+      console.error('选择视频文件失败:', error)
+      alert('选择视频文件失败: ' + error)
+    }
+  }
+
   const handlePlay = async (file: AudioFile) => {
     try {
+      // 获取过滤后的音频列表（与显示的列表一致）
+      const filteredFiles = audioFiles.filter(f =>
+        f.original_name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      const audioList = filteredFiles.map(f => ({ id: f.id, name: f.original_name }))
+
       // 如果点击的是当前播放的音频
       if (currentAudio && currentAudio.id === file.id) {
         if (isPlaying) {
           await pauseAudio()
         } else {
-          await playAudio(file.id, file.original_name)
+          await playAudio(file.id, file.original_name, audioList)
         }
       } else {
-        // 播放新音频
-        await playAudio(file.id, file.original_name)
+        // 播放新音频，并传递整个列表
+        await playAudio(file.id, file.original_name, audioList)
       }
     } catch (error) {
       console.error('播放失败:', error)
@@ -188,9 +250,24 @@ export default function AudioLibrary() {
   }
 
   const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
+
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    }
     return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hour = String(date.getHours()).padStart(2, '0')
+    const minute = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hour}:${minute}`
   }
 
   const toggleSelection = (id: number) => {
@@ -311,6 +388,14 @@ export default function AudioLibrary() {
           </button>
 
           <button
+            onClick={handleOpenExtractDialog}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+          >
+            <Film size={18} />
+            <span>提取音频</span>
+          </button>
+
+          <button
             onClick={handleDelete}
             disabled={selectedFiles.size === 0}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -381,7 +466,7 @@ export default function AudioLibrary() {
                 <th className="pb-3">大小</th>
                 <th className="pb-3">时长</th>
                 <th className="pb-3">格式</th>
-                <th className="pb-3">上传日期</th>
+                <th className="pb-3">上传时间</th>
                 <th className="pb-3 w-24">操作</th>
               </tr>
             </thead>
@@ -410,15 +495,18 @@ export default function AudioLibrary() {
                         />
                       </td>
                       <td className="py-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 max-w-md">
                           {isCurrentlyPlaying && (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-shrink-0">
                               <div className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
                               <div className="w-1 h-4 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
                               <div className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
                             </div>
                           )}
-                          <span className={isCurrentlyPlaying ? 'text-blue-700 font-medium' : 'text-gray-800'}>
+                          <span
+                            className={`truncate ${isCurrentlyPlaying ? 'text-blue-700 font-medium' : 'text-gray-800'}`}
+                            title={file.original_name}
+                          >
                             {file.original_name}
                           </span>
                         </div>
@@ -427,18 +515,34 @@ export default function AudioLibrary() {
                       <td className="py-3 text-gray-600">{formatDuration(file.duration)}</td>
                       <td className="py-3 text-gray-600 uppercase">{file.format}</td>
                       <td className="py-3 text-gray-600">
-                        {new Date(file.upload_date).toLocaleDateString('zh-CN')}
+                        {formatDateTime(file.upload_date)}
                       </td>
                       <td className="py-3">
                         <div className="flex gap-1">
                           {currentAudio && currentAudio.id === file.id && isPlaying ? (
                             <>
                               <button
+                                onClick={() => playPrevious()}
+                                disabled={currentIndex <= 0}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-30"
+                                title="上一个"
+                              >
+                                <SkipBack size={16} />
+                              </button>
+                              <button
                                 onClick={() => handlePlay(file)}
                                 className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                                 title="暂停"
                               >
                                 <Pause size={16} />
+                              </button>
+                              <button
+                                onClick={() => playNext()}
+                                disabled={currentIndex >= totalCount - 1}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-30"
+                                title="下一个"
+                              >
+                                <SkipForward size={16} />
                               </button>
                               <button
                                 onClick={handleStopCurrent}
@@ -522,6 +626,74 @@ export default function AudioLibrary() {
                 >
                   <Square size={16} />
                   <span>结束录音</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 提取音频对话框 */}
+      {showExtractDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h3 className="text-xl font-bold mb-4">提取音频</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                输出文件名（可选）
+              </label>
+              <input
+                type="text"
+                value={extractedFilename}
+                onChange={(e) => setExtractedFilename(e.target.value)}
+                placeholder="留空使用默认文件名"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                disabled={isExtracting}
+              />
+              <p className="text-xs text-gray-500 mt-1">文件将保存为 MP3 格式</p>
+            </div>
+
+            {isExtracting && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 text-orange-600 mb-2">
+                  <Loader2 size={18} className="animate-spin" />
+                  <span className="font-medium">正在提取音频中...</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-orange-600 h-full transition-all duration-300 ease-out"
+                    style={{ width: `${extractProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1 text-center">
+                  {extractProgress.toFixed(0)}%
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowExtractDialog(false)}
+                disabled={isExtracting}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                取消
+              </button>
+              {!isExtracting ? (
+                <button
+                  onClick={handleExtractAudio}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  <Film size={16} />
+                  <span>选择视频文件</span>
+                </button>
+              ) : (
+                <button
+                  disabled
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed"
+                >
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>处理中...</span>
                 </button>
               )}
             </div>

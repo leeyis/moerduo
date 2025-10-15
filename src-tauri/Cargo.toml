@@ -1,7 +1,7 @@
 [package]
 name = "moerduo"
 version = "0.1.0"
-description = "磨耳朵 - 中小学生英语听力定时播放系统"
+description = "磨耳朵 - 开源免费跨平台定时音频播放软件"
 authors = ["you"]
 license = ""
 repository = ""
@@ -25,6 +25,8 @@ uuid = { version = "1.6", features = ["v4"] }
 cpal = "0.15"
 hound = "3.5"
 auto-launch = "0.5"
+symphonia = { version = "0.5", features = ["all"] }
+ffprobe = "0.4"
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem
