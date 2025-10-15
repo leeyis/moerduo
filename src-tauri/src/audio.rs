@@ -6,6 +6,8 @@ use rusqlite::Connection;
 use tauri::State;
 use anyhow::Result;
 use std::fs;
+use std::io::BufReader;
+use rodio::{Decoder, Source};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioFile {
@@ -19,6 +21,33 @@ pub struct AudioFile {
     pub upload_date: String,
     pub play_count: i64,
     pub last_played: Option<String>,
+}
+
+/// 获取音频文件的真实时长（秒）
+fn get_audio_duration(file_path: &std::path::Path) -> i64 {
+    match fs::File::open(file_path) {
+        Ok(file) => {
+            match Decoder::new(BufReader::new(file)) {
+                Ok(source) => {
+                    // 尝试获取总时长
+                    if let Some(duration) = source.total_duration() {
+                        duration.as_secs() as i64
+                    } else {
+                        // 如果无法获取，返回默认值
+                        180
+                    }
+                }
+                Err(_) => {
+                    // 解码失败，返回默认值
+                    180
+                }
+            }
+        }
+        Err(_) => {
+            // 文件打开失败，返回默认值
+            180
+        }
+    }
 }
 
 #[tauri::command]
@@ -67,8 +96,8 @@ pub async fn upload_audio_file(
     // 复制文件
     std::fs::copy(&src_path, &dest_path).map_err(|e| e.to_string())?;
 
-    // 获取音频时长 (这里简化处理，实际需要用音频库读取)
-    let duration = 180; // 默认3分钟，后续用rodio实现真实时长检测
+    // 获取音频真实时长
+    let duration = get_audio_duration(&dest_path);
 
     // 保存到数据库
     let conn = conn.lock().await;
@@ -268,8 +297,8 @@ pub async fn scan_audio_directory(
                         ext_str.to_lowercase()
                     );
 
-                    // 默认时长3分钟，后续可以用音频库获取真实时长
-                    let duration = 180;
+                    // 获取音频真实时长
+                    let duration = get_audio_duration(&path);
 
                     match conn_guard.execute(
                         "INSERT INTO audio_files (filename, original_name, file_path, file_size, duration, format, upload_date)

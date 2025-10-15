@@ -5,11 +5,40 @@ use tauri::State;
 use tokio::sync::Mutex;
 use rusqlite::Connection;
 use serde::Serialize;
+use std::io::BufReader;
+use rodio::{Decoder, Source};
 
 #[derive(Debug, Serialize)]
 pub struct RecordingState {
     pub is_recording: bool,
     pub duration: f32,
+}
+
+/// 获取音频文件的真实时长（秒）
+fn get_audio_duration(file_path: &std::path::Path) -> i64 {
+    match std::fs::File::open(file_path) {
+        Ok(file) => {
+            match Decoder::new(BufReader::new(file)) {
+                Ok(source) => {
+                    // 尝试获取总时长
+                    if let Some(duration) = source.total_duration() {
+                        duration.as_secs() as i64
+                    } else {
+                        // 如果无法获取，返回默认值
+                        180
+                    }
+                }
+                Err(_) => {
+                    // 解码失败，返回默认值
+                    180
+                }
+            }
+        }
+        Err(_) => {
+            // 文件打开失败，返回默认值
+            180
+        }
+    }
 }
 
 // 简化的录音器，不存储Stream对象
@@ -253,8 +282,8 @@ pub async fn stop_recording(
     std::fs::rename(&output_path, &dest_path)
         .map_err(|e| format!("重命名文件失败: {}", e))?;
 
-    // 简化：默认时长3分钟
-    let duration = 180;
+    // 获取音频真实时长
+    let duration = get_audio_duration(&dest_path);
 
     // 保存到数据库
     let conn = conn.lock().await;

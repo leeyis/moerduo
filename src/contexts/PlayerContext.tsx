@@ -1,5 +1,16 @@
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
+
+interface PlaybackState {
+  is_playing: boolean
+  current_audio_id: number | null
+  current_audio_name: string | null
+  volume: number
+  speed: number
+  playlist_queue: number[]
+  current_index: number
+  is_auto_play: boolean
+}
 
 interface PlayerContextType {
   isPlaying: boolean
@@ -18,6 +29,41 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined)
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentAudio, setCurrentAudio] = useState<{ id: number; name: string } | null>(null)
+
+  // 定期同步播放状态
+  useEffect(() => {
+    const syncState = async () => {
+      try {
+        const state = await invoke<PlaybackState>('get_playback_state')
+
+        // 只在状态真正改变时更新，避免不必要的重渲染
+        if (state.is_playing !== isPlaying) {
+          setIsPlaying(state.is_playing)
+        }
+
+        // 如果后端没有当前音频（播放完成或停止），清除前端状态
+        if (!state.current_audio_id && currentAudio) {
+          setCurrentAudio(null)
+          setIsPlaying(false)
+        } else if (state.current_audio_id && state.current_audio_name) {
+          // 如果后端有音频但前端没有，或者ID不匹配，更新前端状态
+          if (!currentAudio || currentAudio.id !== state.current_audio_id) {
+            setCurrentAudio({
+              id: state.current_audio_id,
+              name: state.current_audio_name
+            })
+          }
+        }
+      } catch (error) {
+        console.error('同步播放状态失败:', error)
+      }
+    }
+
+    syncState()
+    const interval = setInterval(syncState, 500) // 每0.5秒同步一次
+
+    return () => clearInterval(interval)
+  }, [isPlaying, currentAudio])
 
   const playAudio = async (id: number, name: string) => {
     try {

@@ -38,7 +38,7 @@ export default function Playlists() {
   const [showAddAudioDialog, setShowAddAudioDialog] = useState(false)
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedAudios, setSelectedAudios] = useState<Set<number>>(new Set())
-  const { playAudio } = usePlayer()
+  const { playAudio, isPlaying, currentAudio } = usePlayer()
 
   useEffect(() => {
     loadPlaylists()
@@ -332,34 +332,54 @@ export default function Playlists() {
                     </tr>
                   </thead>
                   <tbody>
-                    {playlistItems.map((item, index) => (
-                      <tr
-                        key={item.id}
-                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="py-3 text-gray-600">{index + 1}</td>
-                        <td className="py-3 text-gray-800">{item.audio_name}</td>
-                        <td className="py-3 text-gray-600">{formatDuration(item.duration)}</td>
-                        <td className="py-3">
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => handlePlayItem(item)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="播放"
-                            >
-                              <Play size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleRemoveFromPlaylist(item.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="移除"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {playlistItems.map((item, index) => {
+                      const isCurrentlyPlaying = currentAudio && currentAudio.id === item.audio_id && isPlaying
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`border-b border-gray-100 transition-colors ${
+                            isCurrentlyPlaying
+                              ? 'bg-blue-50 hover:bg-blue-100'
+                              : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <td className="py-3 text-gray-600">{index + 1}</td>
+                          <td className="py-3">
+                            <div className="flex items-center gap-2">
+                              {isCurrentlyPlaying && (
+                                <div className="flex items-center gap-1">
+                                  <div className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                                  <div className="w-1 h-4 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                                  <div className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                                </div>
+                              )}
+                              <span className={isCurrentlyPlaying ? 'text-blue-700 font-medium' : 'text-gray-800'}>
+                                {item.audio_name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 text-gray-600">{formatDuration(item.duration)}</td>
+                          <td className="py-3">
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handlePlayItem(item)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="播放"
+                              >
+                                <Play size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveFromPlaylist(item.id)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="移除"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               )}
