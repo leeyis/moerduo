@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, List as ListIcon, Shuffle, Repeat, Repeat1, Music } from 'lucide-react'
+import { Plus, Trash2, Edit2, List as ListIcon, Shuffle, Repeat, Repeat1, Music, Play, PlayCircle } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/tauri'
+import { usePlayer } from '../contexts/PlayerContext'
 
 interface Playlist {
   id: number
@@ -37,6 +38,7 @@ export default function Playlists() {
   const [showAddAudioDialog, setShowAddAudioDialog] = useState(false)
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedAudios, setSelectedAudios] = useState<Set<number>>(new Set())
+  const { playAudio } = usePlayer()
 
   useEffect(() => {
     loadPlaylists()
@@ -144,6 +146,27 @@ export default function Playlists() {
       loadPlaylistItems(selectedPlaylist)
     } catch (error) {
       console.error('从播放列表移除失败:', error)
+    }
+  }
+
+  const handlePlayAll = async () => {
+    if (!selectedPlaylist || playlistItems.length === 0) return
+
+    try {
+      await invoke('play_playlist', { playlistId: selectedPlaylist, isAutoPlay: true })
+      alert('开始播放列表！')
+    } catch (error) {
+      console.error('播放列表失败:', error)
+      alert('播放列表失败: ' + error)
+    }
+  }
+
+  const handlePlayItem = async (item: PlaylistItem) => {
+    try {
+      await playAudio(item.audio_id, item.audio_name)
+    } catch (error) {
+      console.error('播放失败:', error)
+      alert('播放失败: ' + error)
     }
   }
 
@@ -257,6 +280,14 @@ export default function Playlists() {
                 <h2 className="text-2xl font-bold text-gray-800">{currentPlaylist.name}</h2>
                 <div className="flex gap-2">
                   <button
+                    onClick={handlePlayAll}
+                    disabled={playlistItems.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <PlayCircle size={18} />
+                    <span>播放全部</span>
+                  </button>
+                  <button
                     onClick={handleOpenAddAudioDialog}
                     className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
@@ -297,7 +328,7 @@ export default function Playlists() {
                       <th className="pb-3 w-16">#</th>
                       <th className="pb-3">音频名称</th>
                       <th className="pb-3 w-24">时长</th>
-                      <th className="pb-3 w-24">操作</th>
+                      <th className="pb-3 w-32">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -310,12 +341,22 @@ export default function Playlists() {
                         <td className="py-3 text-gray-800">{item.audio_name}</td>
                         <td className="py-3 text-gray-600">{formatDuration(item.duration)}</td>
                         <td className="py-3">
-                          <button
-                            onClick={() => handleRemoveFromPlaylist(item.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handlePlayItem(item)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="播放"
+                            >
+                              <Play size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveFromPlaylist(item.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="移除"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
