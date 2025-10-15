@@ -9,6 +9,7 @@ mod task;
 mod scheduler;
 mod stats;
 mod settings;
+mod recorder;
 
 use tauri::Manager;
 use std::sync::Arc;
@@ -35,6 +36,7 @@ fn main() {
             // 创建共享状态
             let db_conn = Arc::new(Mutex::new(conn));
             let audio_player = Arc::new(Mutex::new(player::AudioPlayer::new()));
+            let audio_recorder = Arc::new(Mutex::new(recorder::AudioRecorder::new()));
 
             // 启动定时任务调度器
             let scheduler = scheduler::Scheduler::new(db_conn.clone(), audio_player.clone());
@@ -46,6 +48,7 @@ fn main() {
             app.manage(db_conn);
             app.manage(audio_dir.clone());
             app.manage(audio_player);
+            app.manage(audio_recorder);
 
             Ok(())
         })
@@ -83,6 +86,9 @@ fn main() {
             settings::get_data_usage,
             settings::export_config,
             settings::import_config,
+            recorder::start_recording,
+            recorder::stop_recording,
+            recorder::get_recording_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

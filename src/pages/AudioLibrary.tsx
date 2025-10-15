@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Upload, Trash2, Play, Pause, Square, Search, Music, RefreshCw } from 'lucide-react'
+import { Upload, Trash2, Play, Pause, Square, Search, Music, RefreshCw, Mic } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { open } from '@tauri-apps/api/dialog'
 import { listen } from '@tauri-apps/api/event'
@@ -24,6 +24,9 @@ export default function AudioLibrary() {
   const [isDragging, setIsDragging] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showRecordDialog, setShowRecordDialog] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingFilename, setRecordingFilename] = useState('')
 
   const handleUpload = async () => {
     try {
@@ -114,6 +117,42 @@ export default function AudioLibrary() {
 
   const handleDeleteCancel = () => {
     setShowDeleteDialog(false)
+  }
+
+  const handleOpenRecordDialog = () => {
+    const now = new Date()
+    const defaultFilename = now.toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' +
+                           now.toTimeString().split(' ')[0].replace(/:/g, '')
+    setRecordingFilename(defaultFilename)
+    setShowRecordDialog(true)
+  }
+
+  const handleStartRecording = async () => {
+    if (!recordingFilename.trim()) {
+      alert('请输入文件名')
+      return
+    }
+
+    try {
+      await invoke('start_recording', { filename: recordingFilename })
+      setIsRecording(true)
+    } catch (error) {
+      console.error('开始录音失败:', error)
+      alert('开始录音失败: ' + error)
+    }
+  }
+
+  const handleStopRecording = async () => {
+    try {
+      await invoke('stop_recording')
+      setIsRecording(false)
+      setShowRecordDialog(false)
+      alert('录音已保存！')
+      await loadAudioFiles()
+    } catch (error) {
+      console.error('停止录音失败:', error)
+      alert('停止录音失败: ' + error)
+    }
   }
 
   const handlePlay = async (file: AudioFile) => {
@@ -264,6 +303,14 @@ export default function AudioLibrary() {
           </button>
 
           <button
+            onClick={handleOpenRecordDialog}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Mic size={18} />
+            <span>录制音频</span>
+          </button>
+
+          <button
             onClick={handleDelete}
             disabled={selectedFiles.size === 0}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -403,6 +450,64 @@ export default function AudioLibrary() {
           </table>
         )}
       </div>
+
+      {/* 录制音频对话框 */}
+      {showRecordDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h3 className="text-xl font-bold mb-4">录制音频</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                文件名
+              </label>
+              <input
+                type="text"
+                value={recordingFilename}
+                onChange={(e) => setRecordingFilename(e.target.value)}
+                placeholder="请输入文件名"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                disabled={isRecording}
+              />
+              <p className="text-xs text-gray-500 mt-1">文件将保存为 WAV 格式</p>
+            </div>
+            {isRecording && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-600">
+                  <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse" />
+                  <span className="font-medium">正在录音中...</span>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              {!isRecording ? (
+                <>
+                  <button
+                    onClick={() => setShowRecordDialog(false)}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleStartRecording}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    <Mic size={16} />
+                    <span>开始录音</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleStopRecording}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <Square size={16} />
+                  <span>结束录音</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
