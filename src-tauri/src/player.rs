@@ -205,13 +205,20 @@ pub async fn play_audio(
 
     // 播放音频
     let mut player = player.lock().await;
-    player.play_with_info(&file_path, id, audio_name)?;
+    player.play_with_info(&file_path, id, audio_name.clone())?;
 
-    // 更新播放计数
+    // 更新播放计数和记录播放历史
     let conn = conn.lock().await;
     conn.execute(
         "UPDATE audio_files SET play_count = play_count + 1, last_played = datetime('now') WHERE id = ?1",
         [id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    // 记录到播放历史
+    conn.execute(
+        "INSERT INTO playback_history (audio_id, audio_name) VALUES (?1, ?2)",
+        (id, &audio_name),
     )
     .map_err(|e| e.to_string())?;
 

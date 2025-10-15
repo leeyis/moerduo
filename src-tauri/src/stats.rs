@@ -145,3 +145,94 @@ pub async fn get_daily_activity(
 
     Ok(activities)
 }
+
+#[derive(Serialize)]
+pub struct MonthlyPlayback {
+    pub date: String,
+    pub play_count: i64,
+    pub playlists: Vec<PlaylistPlayInfo>,
+}
+
+#[derive(Serialize)]
+pub struct PlaylistPlayInfo {
+    pub playlist_name: Option<String>,
+    pub audio_count: i64,
+}
+
+#[tauri::command]
+pub async fn get_monthly_playback(
+    year: i32,
+    month: i32,
+    conn: State<'_, Arc<Mutex<Connection>>>,
+) -> Result<Vec<MonthlyPlayback>, String> {
+    let conn = conn.lock().await;
+
+    // 构建日期范围
+    let start_date = format!("{:04}-{:02}-01", year, month);
+    let end_date = if month == 12 {
+        format!("{:04}-01-01", year + 1)
+    } else {
+        format!("{:04}-{:02}-01", year, month + 1)
+    };
+
+    // 获取该月的所有日期及其播放记录
+    let mut stmt = conn
+        .prepare(
+            "SELECT DATE(play_time) as date,
+                    COALESCE(playlist_name, '单独播放') as playlist_name,
+                    COUNT(*) as audio_count
+             FROM playback_history
+             WHERE DATE(play_time) >= ?1 AND DATE(play_time) < ?2
+             GROUP BY DATE(play_time), playlist_name
+             ORDER BY date DESC, audio_count DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([&start_date, &end_date], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // 按日期分组
+    let mut date_map: std::collections::HashMap<String, Vec<PlaylistPlayInfo>> = std::collections::HashMap::new();
+
+    for (date, playlist_name, audio_count) in rows {
+        let playlist_name = if playlist_name == "单独播放" {
+            None
+        } else {
+            Some(playlist_name)
+        };
+
+        date_map
+            .entry(date)
+            .or_insert_with(Vec::new)
+            .push(PlaylistPlayInfo {
+                playlist_name,
+                audio_count,
+            });
+    }
+
+    // 转换为结果格式
+    let mut result: Vec<MonthlyPlayback> = date_map
+        .into_iter()
+        .map(|(date, playlists)| {
+            let play_count = playlists.iter().map(|p| p.audio_count).sum();
+            MonthlyPlayback {
+                date,
+                play_count,
+                playlists,
+            }
+        })
+        .collect();
+
+    result.sort_by(|a, b| b.date.cmp(&a.date));
+
+    Ok(result)
+}

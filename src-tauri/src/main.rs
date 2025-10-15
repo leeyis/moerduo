@@ -81,6 +81,7 @@ fn main() {
             stats::get_statistics,
             stats::get_top_audios,
             stats::get_daily_activity,
+            stats::get_monthly_playback,
             settings::get_settings,
             settings::save_settings,
             settings::get_data_usage,

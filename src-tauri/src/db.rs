@@ -88,5 +88,20 @@ pub fn init_database(db_path: &Path) -> Result<Connection> {
         [],
     )?;
 
+    // 创建播放历史记录表（用于统计和日历展示）
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS playback_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            audio_id INTEGER NOT NULL,
+            audio_name TEXT NOT NULL,
+            playlist_id INTEGER,
+            playlist_name TEXT,
+            play_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (audio_id) REFERENCES audio_files(id) ON DELETE CASCADE,
+            FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
     Ok(conn)
 }
