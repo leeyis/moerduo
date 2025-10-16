@@ -25,16 +25,29 @@
   --bg-accent: 59 130 246;
 }
 
-/* Dark theme */
+/* Dark theme - Enhanced Futuristic Ultrathink Design */
 [data-theme="dark"] {
-  --bg-primary: 17 24 39;
-  --bg-secondary: 31 41 55;
-  --text-primary: 249 250 251;
+  --bg-primary: 0 0 0;
+  --bg-secondary: 15 20 25;
+  --bg-tertiary: 26 31 46;
+  --bg-glass: 20 25 33 / 0.8;
+  --text-primary: 229 231 235;
   --text-secondary: 209 213 219;
-  --border-primary: 55 65 81;
-  --text-muted: 163 163 170;
-  --bg-muted: 31 41 55;
-  --bg-accent: 34 211 238;
+  --text-tertiary: 156 163 175;
+  --text-accent: 34 211 238;
+  --border-primary: 31 41 55;
+  --border-secondary: 55 65 81;
+  --border-glow: 34 211 238 / 0.3;
+  --text-muted: 107 114 128;
+  --bg-muted: 26 31 46;
+  --bg-accent: 14 165 233;
+  --accent-glow: 14 165 233 / 0.4;
+  --success-primary: 34 197 94;
+  --success-glow: 34 197 94 / 0.3;
+  --warning-primary: 245 158 11;
+  --warning-glow: 245 158 11 / 0.3;
+  --error-primary: 239 68 68;
+  --error-glow: 239 68 68 / 0.3;
 }
 
 body {

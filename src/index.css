@@ -40,18 +40,30 @@ body {
   --accent-hover: #2563eb;
 }
 
-/* Dark theme styles */
+/* Dark theme styles - Enhanced Futuristic Ultrathink Design */
 [data-theme="dark"] {
-  --bg-primary: #1f2937;
-  --bg-secondary: #111827;
-  --bg-tertiary: #374151;
-  --text-primary: #f9fafb;
-  --text-secondary: #e5e7eb;
+  --bg-primary: #000000;
+  --bg-secondary: #0f1419;
+  --bg-tertiary: #1a1f2e;
+  --bg-card: #141921;
+  --bg-glass: rgba(20, 25, 33, 0.8);
+  --text-primary: #e5e7eb;
+  --text-secondary: #d1d5db;
   --text-tertiary: #9ca3af;
-  --border-primary: #374151;
-  --border-secondary: #4b5563;
-  --accent-primary: #3b82f6;
-  --accent-hover: #60a5fa;
+  --text-muted: #6b7280;
+  --text-accent: #22d3ee;
+  --border-primary: #1f2937;
+  --border-secondary: #374151;
+  --border-glow: rgba(34, 211, 238, 0.3);
+  --accent-primary: #0ea5e9;
+  --accent-hover: #0284c7;
+  --accent-glow: rgba(14, 165, 233, 0.4);
+  --success-primary: #22c55e;
+  --success-glow: rgba(34, 197, 94, 0.3);
+  --warning-primary: #f59e0b;
+  --warning-glow: rgba(245, 158, 11, 0.3);
+  --error-primary: #ef4444;
+  --error-glow: rgba(239, 68, 68, 0.3);
 }
 
 /* Apply theme colors */
@@ -99,9 +111,10 @@ body {
   background-color: var(--accent-hover) !important;
 }
 
-/* Dark theme overrides */
+/* Dark theme overrides with enhanced futuristic styling */
 [data-theme="dark"] .bg-white {
-  background-color: var(--bg-primary) !important;
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border-primary) !important;
 }
 
 [data-theme="dark"] .bg-gray-50 {
@@ -137,9 +150,294 @@ body {
 }
 
 [data-theme="dark"] .bg-blue-600 {
-  background-color: var(--accent-primary) !important;
+  background: var(--accent-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px var(--accent-glow), 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.3s ease;
 }
 
 [data-theme="dark"] .hover\:bg-blue-700:hover {
-  background-color: var(--accent-hover) !important;
+  background: var(--accent-hover) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 24px var(--accent-glow), 0 4px 6px rgba(0, 0, 0, 0.5) !important;
+  transform: translateY(-1px);
+}
+
+/* Add enhanced card effects in dark theme */
+[data-theme="dark"] .bg-white.rounded-lg {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-secondary) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+  position: relative;
+}
+
+[data-theme="dark"] .bg-white.rounded-lg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, transparent, rgba(34, 211, 238, 0.03), transparent);
+  pointer-events: none;
+}
+
+/* Enhanced text styling in dark theme */
+[data-theme="dark"] .text-gray-800.font-bold {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .text-gray-800.font-semibold {
+  color: var(--text-secondary) !important;
+}
+
+/* Style success messages in dark theme */
+[data-theme="dark"] .text-green-600 {
+  color: var(--success-primary) !important;
+  text-shadow: 0 0 6px var(--success-glow);
+}
+
+/* Enhanced button text visibility */
+[data-theme="dark"] .bg-blue-600 * {
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .text-white {
+  color: #ffffff !important;
+}
+
+/* Style player controls in dark theme */
+[data-theme="dark"] .border-t {
+  border-color: var(--border-primary) !important;
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme="dark"] .bg-blue-100 {
+  background: rgba(0, 255, 136, 0.1) !important;
+  border: 1px solid var(--success-glow) !important;
+  color: var(--success-primary) !important;
+  text-shadow: 0 0 6px var(--success-glow);
+}
+
+/* Enhanced Dark Theme Variables */
+[data-theme="dark"] {
+  /* Glow effects for interactive elements */
+  --glow-sm: 0 0 10px var(--accent-glow);
+  --glow-md: 0 0 20px var(--accent-glow);
+  --glow-lg: 0 0 30px var(--accent-glow);
+  --shadow-glow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Glass morphism effect for dark theme */
+[data-theme="dark"] .glass-effect {
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glow) !important;
+  box-shadow: var(--shadow-glow);
+}
+
+/* Futuristic button styles */
+[data-theme="dark"] .cyber-button {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-hover)) !important;
+  border: 1px solid var(--accent-glow) !important;
+  box-shadow: var(--glow-sm);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .cyber-button:hover {
+  box-shadow: var(--glow-md);
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .cyber-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.5s;
+}
+
+[data-theme="dark"] .cyber-button:hover::before {
+  left: 100%;
+}
+
+/* Glowing text effects */
+[data-theme="dark"] .text-glow {
+  text-shadow: 0 0 10px var(--accent-glow);
+}
+
+[data-theme="dark"] .text-accent-glow {
+  color: var(--text-accent) !important;
+  text-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* Futuristic border styles */
+[data-theme="dark"] .border-glow {
+  border: 1px solid var(--border-glow) !important;
+  box-shadow: inset 0 0 12px var(--border-glow);
+}
+
+[data-theme="dark"] .border-cyber {
+  border: 1px solid var(--accent-primary) !important;
+  position: relative;
+}
+
+[data-theme="dark"] .border-cyber::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(45deg, var(--accent-primary), var(--text-accent), var(--accent-primary));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.5;
+}
+
+/* Enhanced card styles */
+[data-theme="dark"] .cyber-card {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 8px;
+  box-shadow: var(--shadow-glow);
+  position: relative;
+}
+
+[data-theme="dark"] .cyber-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, transparent, var(--border-glow), transparent);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* Enhanced scrollbar styling */
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 5px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: 5px;
+  border: 2px solid var(--bg-secondary);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* Fix help page quick start text colors */
+[data-theme="dark"] .text-blue-800 {
+  color: #60a5fa !important;
+}
+
+[data-theme="dark"] .text-blue-700 {
+  color: #93c5fd !important;
+}
+
+/* Fix help page about section text colors */
+[data-theme="dark"] .bg-gray-50 td:not(.font-medium) {
+  color: var(--text-primary) !important;
+}
+
+/* Fix hover backgrounds for better readability */
+[data-theme="dark"] .hover\:bg-gray-50:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .hover\:bg-gray-100:hover {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme="dark"] .hover\:bg-blue-50:hover {
+  background-color: rgba(14, 165, 233, 0.12) !important;
+}
+
+[data-theme="dark"] .hover\:bg-orange-50:hover {
+  background-color: rgba(251, 146, 60, 0.12) !important;
+}
+
+[data-theme="dark"] .hover\:bg-red-50:hover {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+
+/* Fix blue highlight backgrounds */
+[data-theme="dark"] .bg-blue-50 {
+  background-color: rgba(14, 165, 233, 0.15) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .bg-orange-50 {
+  background-color: rgba(251, 146, 60, 0.15) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Status colors with glow */
+[data-theme="dark"] .success-glow {
+  color: var(--success-primary) !important;
+  text-shadow: 0 0 8px var(--success-glow);
+}
+
+[data-theme="dark"] .warning-glow {
+  color: var(--warning-primary) !important;
+  text-shadow: 0 0 8px var(--warning-glow);
+}
+
+[data-theme="dark"] .error-glow {
+  color: var(--error-primary) !important;
+  text-shadow: 0 0 8px var(--error-glow);
+}
+
+/* Enhanced animated background pattern */
+[data-theme="dark"] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(14, 165, 233, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(34, 197, 94, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(245, 158, 11, 0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Grid pattern overlay for tech feel */
+[data-theme="dark"] body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.02) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: -1;
 }

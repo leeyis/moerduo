@@ -5,7 +5,7 @@ import { open } from '@tauri-apps/api/dialog'
 import { useTheme } from '../hooks/useTheme'
 
 export default function SettingsPage() {
-  const { settings, setSettings } = useTheme()
+  const { settings, setSettings, saveSettings } = useTheme()
   const [saved, setSaved] = useState(false)
 
   const handleSave = async () => {
@@ -169,33 +169,33 @@ export default function SettingsPage() {
             <label className="font-medium text-gray-800 mb-3 block">主题</label>
             <div className="grid grid-cols-3 gap-4">
               <button
-                onClick={() => setSettings({ ...settings, theme: 'light' })}
+                onClick={() => saveSettings({ ...settings, theme: 'light' })}
                 className={`flex items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all ${
                   settings.theme === 'light'
                     ? 'border-blue-600 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
                 }`}
               >
                 <Sun size={20} />
                 <span>浅色</span>
               </button>
               <button
-                onClick={() => setSettings({ ...settings, theme: 'dark' })}
+                onClick={() => saveSettings({ ...settings, theme: 'dark' })}
                 className={`flex items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all ${
                   settings.theme === 'dark'
                     ? 'border-blue-600 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
                 }`}
               >
                 <Moon size={20} />
                 <span>深色</span>
               </button>
               <button
-                onClick={() => setSettings({ ...settings, theme: 'auto' })}
+                onClick={() => saveSettings({ ...settings, theme: 'auto' })}
                 className={`flex items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all ${
                   settings.theme === 'auto'
                     ? 'border-blue-600 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
                 }`}
               >
                 <div className="flex">
