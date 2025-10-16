@@ -357,6 +357,19 @@ body {
   color: var(--text-primary) !important;
 }
 
+/* Fix dialog/modal text colors in dark theme */
+[data-theme="dark"] .fixed .bg-white h3.font-bold {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .fixed .bg-white .font-medium {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .fixed .bg-white label.font-medium {
+  color: var(--text-secondary) !important;
+}
+
 /* Fix hover backgrounds for better readability */
 [data-theme="dark"] .hover\:bg-gray-50:hover {
   background-color: rgba(255, 255, 255, 0.08) !important;
