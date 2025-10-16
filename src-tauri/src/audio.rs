@@ -860,7 +860,7 @@ pub async fn check_ffmpeg_status(app: AppHandle) -> Result<FFmpegStatus, String>
         }
 
         // 尝试2: 应用数据目录的tools子目录
-        if let Ok(app_dir) = app.path_resolver().app_dir() {
+        if let Some(app_dir) = app.path_resolver().app_data_dir() {
             let tools_ffmpeg = app_dir.join("tools").join("ffmpeg.exe");
             if tools_ffmpeg.exists() {
                 if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
