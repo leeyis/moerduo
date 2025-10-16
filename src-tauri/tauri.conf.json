@@ -62,7 +62,9 @@
         "icons/256x256.ico",
         "icons/512x512.png"
       ],
-      "resources": ["../tools/*"]
+      "resources": {
+        "../tools": "tools"
+      }
     },
     "security": {
       "csp": null
