@@ -6,7 +6,7 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "磨耳朵",
+    "productName": "Moerduo",
     "version": "0.1.0"
   },
   "tauri": {
@@ -53,15 +53,22 @@
       }
     },
     "bundle": {
-      "active": false,
+      "active": true,
       "targets": "all",
-      "identifier": "com.moerduo.app"
+      "identifier": "com.moerduo.app",
+      "icon": [
+        "icons/64x64.ico",
+        "icons/128x128.ico",
+        "icons/256x256.ico",
+        "icons/512x512.png"
+      ],
+      "resources": ["../tools/*"]
     },
     "security": {
       "csp": null
     },
     "systemTray": {
-      "iconPath": "icons/icon.ico",
+      "iconPath": "icons/128x128.ico",
       "iconAsTemplate": true,
       "menuOnLeftClick": false
     },

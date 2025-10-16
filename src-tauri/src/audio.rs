@@ -419,15 +419,77 @@ pub async fn scan_audio_directory(
 }
 
 /// 获取FFmpeg可执行文件路径
-async fn get_ffmpeg_executable_path() -> Option<PathBuf> {
-    // 首先尝试使用PATH中的ffmpeg
+async fn get_ffmpeg_executable_path(app: Option<&AppHandle>) -> Option<PathBuf> {
+    // 首先尝试使用tools目录中的ffmpeg（优先级最高）
+    if let Some(app_handle) = app {
+        // 开发环境：使用项目根目录下的tools
+        #[cfg(debug_assertions)]
+        {
+            if let Some(exe_dir) = app_handle.path_resolver().app_data_dir() {
+                if let Some(project_root) = exe_dir.parent().and_then(|p| p.parent()) {
+                    let tools_ffmpeg = project_root.join("tools").join("ffmpeg.exe");
+                    if tools_ffmpeg.exists() {
+                        if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                            if output.status.success() {
+                                return Some(tools_ffmpeg);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 生产环境：尝试多个可能的tools目录位置
+        #[cfg(not(debug_assertions))]
+        {
+            // 尝试1: exe所在目录的tools子目录（NSIS安装程序）
+            if let Ok(exe_path) = std::env::current_exe() {
+                if let Some(exe_dir) = exe_path.parent() {
+                    let tools_ffmpeg = exe_dir.join("tools").join("ffmpeg.exe");
+                    if tools_ffmpeg.exists() {
+                        if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                            if output.status.success() {
+                                return Some(tools_ffmpeg);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 尝试2: 应用数据目录的tools子目录
+            if let Some(app_dir) = app_handle.path_resolver().app_data_dir() {
+                let tools_ffmpeg = app_dir.join("tools").join("ffmpeg.exe");
+                if tools_ffmpeg.exists() {
+                    if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                        if output.status.success() {
+                            return Some(tools_ffmpeg);
+                        }
+                    }
+                }
+            }
+
+            // 尝试3: 资源目录的tools子目录
+            if let Some(resource_dir) = app_handle.path_resolver().resource_dir() {
+                let tools_ffmpeg = resource_dir.join("tools").join("ffmpeg.exe");
+                if tools_ffmpeg.exists() {
+                    if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                        if output.status.success() {
+                            return Some(tools_ffmpeg);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 其次尝试使用PATH中的ffmpeg
     if let Ok(output) = create_command("ffmpeg").arg("-version").output() {
         if output.status.success() {
             return Some(PathBuf::from("ffmpeg"));
         }
     }
 
-    // 如果PATH中的不可用，尝试使用本地安装的ffmpeg
+    // 最后尝试使用用户目录中安装的ffmpeg
     #[cfg(target_os = "windows")]
     {
         if let Some(home_dir) = home_dir() {
@@ -455,8 +517,8 @@ pub async fn extract_audio_from_video(
     audio_dir: State<'_, PathBuf>,
 ) -> Result<String, String> {
     // 获取FFmpeg可执行文件路径
-    let ffmpeg_path = get_ffmpeg_executable_path().await
-        .ok_or("FFmpeg未安装。请点击\"一键安装FFmpeg\"按钮进行安装".to_string())?;
+    let ffmpeg_path = get_ffmpeg_executable_path(Some(&app)).await
+        .ok_or("FFmpeg未安装。请将ffmpeg.exe放入tools目录，或点击\"一键安装FFmpeg\"按钮进行安装".to_string())?;
 
     let input_path = PathBuf::from(&video_path);
     if !input_path.exists() {
@@ -566,15 +628,12 @@ pub async fn extract_audio_from_online_video(
     audio_dir: State<'_, PathBuf>,
 ) -> Result<String, String> {
     // 获取FFmpeg可执行文件路径
-    let ffmpeg_path = get_ffmpeg_executable_path().await
-        .ok_or("FFmpeg未安装。请点击\"一键安装FFmpeg\"按钮进行安装".to_string())?;
+    let ffmpeg_path = get_ffmpeg_executable_path(Some(&app)).await
+        .ok_or("FFmpeg未安装。请将ffmpeg.exe放入tools目录，或点击\"一键安装FFmpeg\"按钮进行安装".to_string())?;
 
-    // 检查yt-dlp是否可用
-    let ytdlp_available = check_ytdlp_available().await;
-
-    if !ytdlp_available {
-        return Err("yt-dlp未安装。请访问 https://github.com/yt-dlp/yt-dlp 下载安装，或使用系统包管理器安装 yt-dlp".to_string());
-    }
+    // 获取yt-dlp可执行文件路径
+    let ytdlp_path = get_ytdlp_executable_path(Some(&app)).await
+        .ok_or("yt-dlp未安装。请将yt-dlp.exe放入tools目录".to_string())?;
 
     // 决定使用的 original_name：用户指定的名称 或 视频标题
     let original_name = if output_filename.is_empty() {
@@ -597,7 +656,7 @@ pub async fn extract_audio_from_online_video(
     app.emit_all("extract-progress", 0u8).map_err(|e| e.to_string())?;
 
     // 使用yt-dlp下载音频（直接提取最佳音频）
-    let mut cmd = create_command("yt-dlp");
+    let mut cmd = create_command_from_path(&ytdlp_path);
     cmd
         .arg("-x") // 提取音频
         .arg("--audio-format").arg("mp3") // 转换为mp3
@@ -672,17 +731,172 @@ pub async fn extract_audio_from_online_video(
 }
 
 /// 检查yt-dlp是否可用
-async fn check_ytdlp_available() -> bool {
-    if let Ok(output) = create_command("yt-dlp").arg("--version").output() {
-        return output.status.success();
+async fn check_ytdlp_available(app: Option<&AppHandle>) -> bool {
+    get_ytdlp_executable_path(app).await.is_some()
+}
+
+/// 获取yt-dlp可执行文件路径
+async fn get_ytdlp_executable_path(app: Option<&AppHandle>) -> Option<PathBuf> {
+    // 首先尝试使用tools目录中的yt-dlp（优先级最高）
+    if let Some(app_handle) = app {
+        // 开发环境：使用项目根目录下的tools
+        #[cfg(debug_assertions)]
+        {
+            if let Some(exe_dir) = app_handle.path_resolver().app_data_dir() {
+                if let Some(project_root) = exe_dir.parent().and_then(|p| p.parent()) {
+                    let tools_ytdlp = project_root.join("tools").join("yt-dlp.exe");
+                    if tools_ytdlp.exists() {
+                        if let Ok(output) = create_command_from_path(&tools_ytdlp).arg("--version").output() {
+                            if output.status.success() {
+                                return Some(tools_ytdlp);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 生产环境：尝试多个可能的tools目录位置
+        #[cfg(not(debug_assertions))]
+        {
+            // 尝试1: exe所在目录的tools子目录（NSIS安装程序）
+            if let Ok(exe_path) = std::env::current_exe() {
+                if let Some(exe_dir) = exe_path.parent() {
+                    let tools_ytdlp = exe_dir.join("tools").join("yt-dlp.exe");
+                    if tools_ytdlp.exists() {
+                        if let Ok(output) = create_command_from_path(&tools_ytdlp).arg("--version").output() {
+                            if output.status.success() {
+                                return Some(tools_ytdlp);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 尝试2: 应用数据目录的tools子目录
+            if let Some(app_dir) = app_handle.path_resolver().app_data_dir() {
+                let tools_ytdlp = app_dir.join("tools").join("yt-dlp.exe");
+                if tools_ytdlp.exists() {
+                    if let Ok(output) = create_command_from_path(&tools_ytdlp).arg("--version").output() {
+                        if output.status.success() {
+                            return Some(tools_ytdlp);
+                        }
+                    }
+                }
+            }
+
+            // 尝试3: 资源目录的tools子目录
+            if let Some(resource_dir) = app_handle.path_resolver().resource_dir() {
+                let tools_ytdlp = resource_dir.join("tools").join("yt-dlp.exe");
+                if tools_ytdlp.exists() {
+                    if let Ok(output) = create_command_from_path(&tools_ytdlp).arg("--version").output() {
+                        if output.status.success() {
+                            return Some(tools_ytdlp);
+                        }
+                    }
+                }
+            }
+        }
     }
-    false
+
+    // 其次尝试使用PATH中的yt-dlp
+    if let Ok(output) = create_command("yt-dlp").arg("--version").output() {
+        if output.status.success() {
+            return Some(PathBuf::from("yt-dlp"));
+        }
+    }
+
+    None
 }
 
 /// 检查FFmpeg状态
 #[tauri::command]
-pub async fn check_ffmpeg_status() -> Result<FFmpegStatus, String> {
-    // 首先尝试使用PATH中的ffmpeg
+pub async fn check_ffmpeg_status(app: AppHandle) -> Result<FFmpegStatus, String> {
+    // 首先尝试使用tools目录中的ffmpeg（优先级最高）
+    // 开发环境：使用项目根目录下的tools
+    #[cfg(debug_assertions)]
+    {
+        if let Some(exe_dir) = app.path_resolver().app_data_dir() {
+            if let Some(project_root) = exe_dir.parent().and_then(|p| p.parent()) {
+                let tools_ffmpeg = project_root.join("tools").join("ffmpeg.exe");
+                if tools_ffmpeg.exists() {
+                    if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                        if output.status.success() {
+                            let version_str = String::from_utf8_lossy(&output.stdout);
+                            let version_line = version_str.lines().next().unwrap_or("").to_string();
+                            return Ok(FFmpegStatus {
+                                available: true,
+                                version: Some(version_line),
+                                path: Some(format!("内置FFmpeg (tools目录): {}", tools_ffmpeg.display())),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 生产环境：尝试多个可能的tools目录位置
+    #[cfg(not(debug_assertions))]
+    {
+        // 尝试1: exe所在目录的tools子目录（NSIS安装程序）
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let tools_ffmpeg = exe_dir.join("tools").join("ffmpeg.exe");
+                if tools_ffmpeg.exists() {
+                    if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                        if output.status.success() {
+                            let version_str = String::from_utf8_lossy(&output.stdout);
+                            let version_line = version_str.lines().next().unwrap_or("").to_string();
+                            return Ok(FFmpegStatus {
+                                available: true,
+                                version: Some(version_line),
+                                path: Some("内置FFmpeg (tools目录)".to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // 尝试2: 应用数据目录的tools子目录
+        if let Ok(app_dir) = app.path_resolver().app_dir() {
+            let tools_ffmpeg = app_dir.join("tools").join("ffmpeg.exe");
+            if tools_ffmpeg.exists() {
+                if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                    if output.status.success() {
+                        let version_str = String::from_utf8_lossy(&output.stdout);
+                        let version_line = version_str.lines().next().unwrap_or("").to_string();
+                        return Ok(FFmpegStatus {
+                            available: true,
+                            version: Some(version_line),
+                            path: Some("内置FFmpeg (tools目录)".to_string()),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 尝试3: 资源目录的tools子目录
+        if let Some(resource_dir) = app.path_resolver().resource_dir() {
+            let tools_ffmpeg = resource_dir.join("tools").join("ffmpeg.exe");
+            if tools_ffmpeg.exists() {
+                if let Ok(output) = create_command_from_path(&tools_ffmpeg).arg("-version").output() {
+                    if output.status.success() {
+                        let version_str = String::from_utf8_lossy(&output.stdout);
+                        let version_line = version_str.lines().next().unwrap_or("").to_string();
+                        return Ok(FFmpegStatus {
+                            available: true,
+                            version: Some(version_line),
+                            path: Some("内置FFmpeg (tools目录)".to_string()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 尝试使用PATH中的ffmpeg
     if let Ok(output) = create_command("ffmpeg").arg("-version").output() {
         if output.status.success() {
             let version_str = String::from_utf8_lossy(&output.stdout);
