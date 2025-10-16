@@ -5,6 +5,7 @@ import { open } from '@tauri-apps/api/dialog'
 import { listen } from '@tauri-apps/api/event'
 import { usePlayer } from '../contexts/PlayerContext'
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
+import { useTheme } from '../hooks/useTheme'
 
 interface AudioFile {
   id: number
@@ -17,6 +18,8 @@ interface AudioFile {
 }
 
 export default function AudioLibrary() {
+  const { settings } = useTheme()
+  const theme = settings.theme
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([])
   const [selectedFiles, setSelectedFiles] = useState<Set<number>>(new Set())
   const [searchTerm, setSearchTerm] = useState('')
@@ -247,7 +250,7 @@ export default function AudioLibrary() {
         })
 
         try {
-          const filename = extractedFilename.trim() || 'extracted_audio'
+          const filename = extractedFilename.trim()
           const result = await invoke<string>('extract_audio_from_video', {
             videoPath: selected,
             outputFilename: filename
@@ -481,32 +484,52 @@ export default function AudioLibrary() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto">
         {audioFiles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <Music size={64} className="mb-4" />
-            <p className="text-lg">还没有音频文件</p>
-            <p className="text-sm mt-2">点击"上传音频"、"扫描音频"或拖放文件到此处</p>
-            <div className="mt-6 p-6 border-2 border-dashed border-gray-300 rounded-lg">
-              <div className="flex items-center gap-3 text-gray-500">
-                <RefreshCw size={24} />
-                <div>
-                  <p className="font-medium">支持自动扫描</p>
-                  <p className="text-xs mt-1">扫描音频存储路径中的所有音频文件</p>
+          <div className="flex items-center justify-center h-full">
+            <div className="flex flex-col items-center">
+              <Music size={48} className={theme === 'dark' ? 'text-gray-500 mb-3' : 'text-gray-400 mb-3'} />
+              <p className={`text-base mb-8 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                还没有音频文件，选择下方方式添加
+              </p>
+
+              <div className="grid grid-cols-2 gap-4 max-w-xl">
+                <div className={`flex items-center gap-3 p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                  <Upload size={20} className="text-blue-500 flex-shrink-0" />
+                  <div>
+                    <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>拖放上传</p>
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>支持 MP3/WAV/OGG/FLAC/M4A</p>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="mt-4 p-6 border-2 border-dashed border-gray-300 rounded-lg">
-              <div className="flex items-center gap-3 text-gray-500">
-                <Upload size={24} />
-                <div>
-                  <p className="font-medium">支持拖放上传</p>
-                  <p className="text-xs mt-1">MP3, WAV, OGG, FLAC, M4A</p>
+
+                <div className={`flex items-center gap-3 p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                  <RefreshCw size={20} className="text-green-500 flex-shrink-0" />
+                  <div>
+                    <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>自动扫描</p>
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>扫描音频存储目录</p>
+                  </div>
+                </div>
+
+                <div className={`flex items-center gap-3 p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                  <Mic size={20} className="text-purple-500 flex-shrink-0" />
+                  <div>
+                    <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>直接录制</p>
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>麦克风录制音频</p>
+                  </div>
+                </div>
+
+                <div className={`flex items-center gap-3 p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                  <Film size={20} className="text-orange-500 flex-shrink-0" />
+                  <div>
+                    <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>音频提取</p>
+                    <p className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-500'}`}>从视频中提取音频</p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         ) : (
+          <div className="p-6">
           <table className="w-full">
             <thead className="border-b border-gray-200">
               <tr className="text-left text-sm text-gray-600">
@@ -634,6 +657,7 @@ export default function AudioLibrary() {
                 })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
