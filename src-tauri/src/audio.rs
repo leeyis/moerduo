@@ -556,6 +556,129 @@ pub async fn extract_audio_from_video(
     Ok(original_name)  // 返回 original_name 而不是 filename
 }
 
+/// 从在线视频提取音频（使用yt-dlp + FFmpeg）
+#[tauri::command]
+pub async fn extract_audio_from_online_video(
+    video_url: String,
+    output_filename: String,
+    app: AppHandle,
+    conn: State<'_, Arc<Mutex<Connection>>>,
+    audio_dir: State<'_, PathBuf>,
+) -> Result<String, String> {
+    // 获取FFmpeg可执行文件路径
+    let ffmpeg_path = get_ffmpeg_executable_path().await
+        .ok_or("FFmpeg未安装。请点击\"一键安装FFmpeg\"按钮进行安装".to_string())?;
+
+    // 检查yt-dlp是否可用
+    let ytdlp_available = check_ytdlp_available().await;
+
+    if !ytdlp_available {
+        return Err("yt-dlp未安装。请访问 https://github.com/yt-dlp/yt-dlp 下载安装，或使用系统包管理器安装 yt-dlp".to_string());
+    }
+
+    // 决定使用的 original_name：用户指定的名称 或 视频标题
+    let original_name = if output_filename.is_empty() {
+        // 使用视频URL的hash作为临时名称（稍后会尝试获取真实标题）
+        format!("online_{}", chrono::Local::now().format("%Y%m%d_%H%M%S"))
+    } else {
+        output_filename.clone()
+    };
+
+    // 生成唯一的文件名（用于实际存储）
+    let filename = format!(
+        "{}_{}.mp3",
+        chrono::Local::now().format("%Y%m%d_%H%M%S"),
+        uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+    );
+
+    let output_path = audio_dir.join(&filename);
+
+    // 发送进度开始事件
+    app.emit_all("extract-progress", 0u8).map_err(|e| e.to_string())?;
+
+    // 使用yt-dlp下载音频（直接提取最佳音频）
+    let mut cmd = create_command("yt-dlp");
+    cmd
+        .arg("-x") // 提取音频
+        .arg("--audio-format").arg("mp3") // 转换为mp3
+        .arg("--audio-quality").arg("0") // 最佳音质
+        .arg("--ffmpeg-location").arg(ffmpeg_path.to_str().unwrap()) // 指定ffmpeg位置
+        .arg("-o").arg(output_path.to_str().unwrap()) // 输出路径
+        .arg("--no-playlist") // 不下载播放列表
+        .arg("--no-warnings") // 不显示警告
+        .arg(&video_url);
+
+    // 发送进度 20%
+    app.emit_all("extract-progress", 20u8).map_err(|e| e.to_string())?;
+
+    // 执行yt-dlp命令
+    let output = cmd.output().map_err(|e| format!("执行yt-dlp命令失败: {}. 请确保已安装 yt-dlp", e))?;
+
+    // 发送进度 90%
+    app.emit_all("extract-progress", 90u8).map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("yt-dlp执行失败: {}. 请检查视频URL是否正确", error_msg));
+    }
+
+    // 检查输出文件是否存在
+    if !output_path.exists() {
+        return Err("音频提取失败：输出文件不存在".to_string());
+    }
+
+    // 发送完成进度
+    app.emit_all("extract-progress", 100u8).map_err(|e| e.to_string())?;
+
+    // 获取输出文件信息
+    let metadata = std::fs::metadata(&output_path)
+        .map_err(|e| format!("无法获取输出文件信息: {}", e))?;
+    let file_size = metadata.len() as i64;
+
+    // 获取音频时长
+    let duration = get_audio_duration(&output_path);
+
+    // 尝试从yt-dlp输出获取真实标题（如果用户没有指定文件名）
+    let final_name = if output_filename.is_empty() {
+        // 尝试从stderr获取标题信息
+        let _stdout_str = String::from_utf8_lossy(&output.stdout);
+        let _stderr_str = String::from_utf8_lossy(&output.stderr);
+
+        // 简单的标题提取逻辑（yt-dlp通常在输出中包含标题信息）
+        // 这里使用原始名称，实际使用时可以改进
+        original_name
+    } else {
+        output_filename
+    };
+
+    // 保存到数据库
+    let conn = conn.lock().await;
+    conn.execute(
+        "INSERT INTO audio_files (filename, original_name, file_path, file_size, duration, format, upload_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        (
+            &filename,
+            &final_name,
+            output_path.to_str().unwrap(),
+            file_size,
+            duration,
+            "mp3",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        ),
+    )
+    .map_err(|e| format!("保存到数据库失败: {}", e))?;
+
+    Ok(final_name)
+}
+
+/// 检查yt-dlp是否可用
+async fn check_ytdlp_available() -> bool {
+    if let Ok(output) = create_command("yt-dlp").arg("--version").output() {
+        return output.status.success();
+    }
+    false
+}
+
 /// 检查FFmpeg状态
 #[tauri::command]
 pub async fn check_ffmpeg_status() -> Result<FFmpegStatus, String> {

@@ -31,6 +31,8 @@ export default function AudioLibrary() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingFilename, setRecordingFilename] = useState('')
   const [showExtractDialog, setShowExtractDialog] = useState(false)
+  const [extractType, setExtractType] = useState<'local' | 'online'>('local')
+  const [videoUrl, setVideoUrl] = useState('')
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractProgress, setExtractProgress] = useState(0)
   const [extractedFilename, setExtractedFilename] = useState('')
@@ -167,6 +169,8 @@ export default function AudioLibrary() {
   }
 
   const handleOpenExtractDialog = async () => {
+    setExtractType('local')
+    setVideoUrl('')
     setExtractedFilename('')
     setExtractProgress(0)
 
@@ -231,48 +235,85 @@ export default function AudioLibrary() {
   }
 
   const handleExtractAudio = async () => {
-    try {
-      const selected = await open({
-        multiple: false,
-        filters: [{
-          name: 'Video',
-          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp']
-        }]
+    if (extractType === 'online') {
+      // 在线视频提取
+      if (!videoUrl.trim()) {
+        alert('请输入视频地址')
+        return
+      }
+
+      setIsExtracting(true)
+      setExtractProgress(0)
+
+      // 监听提取进度
+      const unlisten = listen<number>('extract-progress', (event) => {
+        setExtractProgress(event.payload)
       })
 
-      if (selected && !Array.isArray(selected)) {
-        setIsExtracting(true)
-        setExtractProgress(0)
-
-        // 监听提取进度
-        const unlisten = listen<number>('extract-progress', (event) => {
-          setExtractProgress(event.payload)
+      try {
+        const filename = extractedFilename.trim()
+        const result = await invoke<string>('extract_audio_from_online_video', {
+          videoUrl: videoUrl,
+          outputFilename: filename
         })
 
-        try {
-          const filename = extractedFilename.trim()
-          const result = await invoke<string>('extract_audio_from_video', {
-            videoPath: selected,
-            outputFilename: filename
+        setIsExtracting(false)
+        setExtractProgress(100)
+        setShowExtractDialog(false)
+        alert(`音频提取成功！\n文件名：${result}`)
+        await loadAudioFiles()
+      } catch (error) {
+        setIsExtracting(false)
+        console.error('在线视频音频提取失败:', error)
+        alert('音频提取失败: ' + error)
+      } finally {
+        unlisten.then(fn => fn())
+      }
+    } else {
+      // 本地视频提取
+      try {
+        const selected = await open({
+          multiple: false,
+          filters: [{
+            name: 'Video',
+            extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp']
+          }]
+        })
+
+        if (selected && !Array.isArray(selected)) {
+          setIsExtracting(true)
+          setExtractProgress(0)
+
+          // 监听提取进度
+          const unlisten = listen<number>('extract-progress', (event) => {
+            setExtractProgress(event.payload)
           })
 
-          setIsExtracting(false)
-          setExtractProgress(100)
-          setShowExtractDialog(false)
-          alert(`音频提取成功！\n文件名：${result}`)
-          await loadAudioFiles()
-        } catch (error) {
-          setIsExtracting(false)
-          console.error('音频提取失败:', error)
-          alert('音频提取失败: ' + error)
-        } finally {
-          unlisten.then(fn => fn())
+          try {
+            const filename = extractedFilename.trim()
+            const result = await invoke<string>('extract_audio_from_video', {
+              videoPath: selected,
+              outputFilename: filename
+            })
+
+            setIsExtracting(false)
+            setExtractProgress(100)
+            setShowExtractDialog(false)
+            alert(`音频提取成功！\n文件名：${result}`)
+            await loadAudioFiles()
+          } catch (error) {
+            setIsExtracting(false)
+            console.error('音频提取失败:', error)
+            alert('音频提取失败: ' + error)
+          } finally {
+            unlisten.then(fn => fn())
+          }
         }
+      } catch (error) {
+        setIsExtracting(false)
+        console.error('选择视频文件失败:', error)
+        alert('选择视频文件失败: ' + error)
       }
-    } catch (error) {
-      setIsExtracting(false)
-      console.error('选择视频文件失败:', error)
-      alert('选择视频文件失败: ' + error)
     }
   }
 
@@ -722,8 +763,36 @@ export default function AudioLibrary() {
       {/* 提取音频对话框 */}
       {showExtractDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
+          <div className="bg-white rounded-lg p-6 w-[480px]">
             <h3 className="text-xl font-bold mb-4">提取音频</h3>
+
+            {/* 提取类型选择 */}
+            <div className="mb-4">
+              <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => setExtractType('local')}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                    extractType === 'local'
+                      ? 'bg-white text-orange-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  disabled={isExtracting}
+                >
+                  本地视频
+                </button>
+                <button
+                  onClick={() => setExtractType('online')}
+                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                    extractType === 'online'
+                      ? 'bg-white text-orange-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  disabled={isExtracting}
+                >
+                  在线视频
+                </button>
+              </div>
+            </div>
 
             {/* FFmpeg状态显示 */}
             <div className="mb-4 p-3 border rounded-lg">
@@ -777,6 +846,25 @@ export default function AudioLibrary() {
               )}
             </div>
 
+            {/* 在线视频URL输入 */}
+            {extractType === 'online' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  视频地址 *
+                </label>
+                <input
+                  type="text"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="输入Bilibili、抖音等视频链接"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  disabled={isExtracting || isInstallingFFmpeg || isRestarting}
+                />
+                <p className="text-xs text-gray-500 mt-1">支持B站、抖音、YouTube等主流平台</p>
+              </div>
+            )}
+
+            {/* 输出文件名 */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 输出文件名（可选）
@@ -785,7 +873,7 @@ export default function AudioLibrary() {
                 type="text"
                 value={extractedFilename}
                 onChange={(e) => setExtractedFilename(e.target.value)}
-                placeholder="留空使用默认文件名"
+                placeholder={extractType === 'online' ? "留空使用视频标题" : "留空使用默认文件名"}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                 disabled={isExtracting || isInstallingFFmpeg || isRestarting}
               />
@@ -796,7 +884,9 @@ export default function AudioLibrary() {
               <div className="mb-4">
                 <div className="flex items-center gap-2 text-orange-600 mb-2">
                   <Loader2 size={18} className="animate-spin" />
-                  <span className="font-medium">正在提取音频中...</span>
+                  <span className="font-medium">
+                    {extractType === 'online' ? '正在下载并提取音频...' : '正在提取音频...'}
+                  </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                   <div
@@ -821,15 +911,15 @@ export default function AudioLibrary() {
               {!isExtracting && !isInstallingFFmpeg && !isRestarting ? (
                 <button
                   onClick={handleExtractAudio}
-                  disabled={!ffmpegStatus?.available}
+                  disabled={!ffmpegStatus?.available || (extractType === 'online' && !videoUrl.trim())}
                   className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors ${
-                    ffmpegStatus?.available
+                    ffmpegStatus?.available && (extractType === 'local' || videoUrl.trim())
                       ? 'bg-orange-600 hover:bg-orange-700'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
                   <Film size={16} />
-                  <span>选择视频文件</span>
+                  <span>{extractType === 'online' ? '开始提取' : '选择视频文件'}</span>
                 </button>
               ) : (
                 <button

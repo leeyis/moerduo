@@ -141,6 +141,7 @@ fn main() {
             recorder::stop_recording,
             recorder::get_recording_state,
             audio::extract_audio_from_video,
+            audio::extract_audio_from_online_video,
             audio::check_ffmpeg_status,
             audio::install_ffmpeg,
             restart::restart_app,
