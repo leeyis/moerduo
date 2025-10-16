@@ -18,6 +18,37 @@ use symphonia::core::probe::Hint;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::formats::FormatOptions;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+// Windows平台的CREATE_NO_WINDOW标志
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// 创建一个隐藏窗口的Command
+fn create_command(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    cmd
+}
+
+/// 创建一个隐藏窗口的Command (PathBuf版本)
+fn create_command_from_path(program: &PathBuf) -> Command {
+    let mut cmd = Command::new(program);
+
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    cmd
+}
+
 #[derive(Debug, Serialize)]
 pub struct FFmpegStatus {
     pub available: bool,
@@ -387,13 +418,31 @@ pub async fn scan_audio_directory(
     })
 }
 
-/// 检查FFmpeg是否可用
-fn check_ffmpeg_available() -> bool {
-    Command::new("ffmpeg")
-        .arg("-version")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+/// 获取FFmpeg可执行文件路径
+async fn get_ffmpeg_executable_path() -> Option<PathBuf> {
+    // 首先尝试使用PATH中的ffmpeg
+    if let Ok(output) = create_command("ffmpeg").arg("-version").output() {
+        if output.status.success() {
+            return Some(PathBuf::from("ffmpeg"));
+        }
+    }
+
+    // 如果PATH中的不可用，尝试使用本地安装的ffmpeg
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(home_dir) = home_dir() {
+            let local_ffmpeg = home_dir.join("ffmpeg").join("bin").join("ffmpeg.exe");
+            if local_ffmpeg.exists() {
+                if let Ok(output) = create_command_from_path(&local_ffmpeg).arg("-version").output() {
+                    if output.status.success() {
+                        return Some(local_ffmpeg);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// 从视频文件提取音频（使用FFmpeg命令行）
@@ -405,27 +454,35 @@ pub async fn extract_audio_from_video(
     conn: State<'_, Arc<Mutex<Connection>>>,
     audio_dir: State<'_, PathBuf>,
 ) -> Result<String, String> {
-    // 检查FFmpeg是否可用
-    if !check_ffmpeg_available() {
-        return Err("FFmpeg未安装或不在PATH中。请安装FFmpeg后重试。\n安装方法：\n1. Windows: 从 https://ffmpeg.org/download.html 下载并添加到PATH\n2. macOS: brew install ffmpeg\n3. Linux: sudo apt install ffmpeg".to_string());
-    }
+    // 获取FFmpeg可执行文件路径
+    let ffmpeg_path = get_ffmpeg_executable_path().await
+        .ok_or("FFmpeg未安装。请点击\"一键安装FFmpeg\"按钮进行安装".to_string())?;
 
     let input_path = PathBuf::from(&video_path);
     if !input_path.exists() {
         return Err("视频文件不存在".to_string());
     }
 
-    // 生成输出文件名
-    let filename = if output_filename.is_empty() {
-        let now = chrono::Local::now();
-        format!(
-            "{}_{}.mp3",
-            now.format("%Y%m%d_%H%M%S"),
-            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
-        )
+    // 获取视频文件的原始名称（不含扩展名）
+    let video_original_name = input_path
+        .file_stem()
+        .and_then(|n| n.to_str())
+        .ok_or("无法获取视频文件名")?
+        .to_string();
+
+    // 决定使用的 original_name：用户指定的名称 或 视频原始名称
+    let original_name = if output_filename.is_empty() {
+        video_original_name.clone()
     } else {
-        format!("{}.mp3", output_filename)
+        output_filename.clone()
     };
+
+    // 生成唯一的文件名（用于实际存储）
+    let filename = format!(
+        "{}_{}.mp3",
+        chrono::Local::now().format("%Y%m%d_%H%M%S"),
+        uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+    );
 
     let output_path = audio_dir.join(&filename);
 
@@ -433,7 +490,7 @@ pub async fn extract_audio_from_video(
     app.emit_all("extract-progress", 0u8).map_err(|e| e.to_string())?;
 
     // 构建FFmpeg命令
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = create_command_from_path(&ffmpeg_path);
     cmd
         .arg("-i") // 输入文件
         .arg(&video_path)
@@ -486,7 +543,7 @@ pub async fn extract_audio_from_video(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         (
             &filename,
-            &filename,
+            &original_name,  // 使用视频文件的原始名称或用户指定的名称
             output_path.to_str().unwrap(),
             file_size,
             duration,
@@ -496,45 +553,51 @@ pub async fn extract_audio_from_video(
     )
     .map_err(|e| format!("保存到数据库失败: {}", e))?;
 
-    Ok(filename)
+    Ok(original_name)  // 返回 original_name 而不是 filename
 }
 
 /// 检查FFmpeg状态
 #[tauri::command]
 pub async fn check_ffmpeg_status() -> Result<FFmpegStatus, String> {
-    let output = Command::new("ffmpeg")
-        .arg("-version")
-        .output();
-
-    match output {
-        Ok(output) => {
-            if output.status.success() {
-                let version_str = String::from_utf8_lossy(&output.stdout);
-                let version_line = version_str.lines().next().unwrap_or("").to_string();
-                let version = Some(version_line);
-                let path = Some("ffmpeg".to_string());
-
-                Ok(FFmpegStatus {
-                    available: true,
-                    version,
-                    path,
-                })
-            } else {
-                Ok(FFmpegStatus {
-                    available: false,
-                    version: None,
-                    path: None,
-                })
-            }
-        }
-        Err(_) => {
-            Ok(FFmpegStatus {
-                available: false,
-                version: None,
-                path: None,
-            })
+    // 首先尝试使用PATH中的ffmpeg
+    if let Ok(output) = create_command("ffmpeg").arg("-version").output() {
+        if output.status.success() {
+            let version_str = String::from_utf8_lossy(&output.stdout);
+            let version_line = version_str.lines().next().unwrap_or("").to_string();
+            return Ok(FFmpegStatus {
+                available: true,
+                version: Some(version_line),
+                path: Some("ffmpeg (系统PATH)".to_string()),
+            });
         }
     }
+
+    // 如果PATH中的不可用，尝试使用本地安装的ffmpeg
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(home_dir) = home_dir() {
+            let local_ffmpeg = home_dir.join("ffmpeg").join("bin").join("ffmpeg.exe");
+            if local_ffmpeg.exists() {
+                if let Ok(output) = create_command_from_path(&local_ffmpeg).arg("-version").output() {
+                    if output.status.success() {
+                        let version_str = String::from_utf8_lossy(&output.stdout);
+                        let version_line = version_str.lines().next().unwrap_or("").to_string();
+                        return Ok(FFmpegStatus {
+                            available: true,
+                            version: Some(version_line),
+                            path: Some(local_ffmpeg.to_string_lossy().to_string()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(FFmpegStatus {
+        available: false,
+        version: None,
+        path: None,
+    })
 }
 
 /// 一键下载安装FFmpeg
@@ -570,7 +633,7 @@ async fn install_ffmpeg_windows(app: AppHandle) -> Result<String, String> {
     // 检查是否已经安装
     if ffmpeg_exe.exists() {
         // 检查PATH环境变量
-        if let Ok(output) = Command::new("ffmpeg").arg("-version").output() {
+        if let Ok(output) = create_command("ffmpeg").arg("-version").output() {
             if output.status.success() {
                 return Ok("FFmpeg已安装并配置完成".to_string());
             }
