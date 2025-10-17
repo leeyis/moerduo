@@ -1,6 +1,9 @@
 # Claude AI project instructions
 CLAUDE.md
 
+# Tools (bundled binaries - too large for GitHub)
+tools/
+
 # Node
 node_modules/
 dist/
