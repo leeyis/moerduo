@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Book, Clock, List, Music, Settings, Play, HelpCircle, ChevronRight } from 'lucide-react'
+import { Book, Clock, List, Music, Settings, Play, HelpCircle, ChevronRight, Globe } from 'lucide-react'
 
 export default function Help() {
   const [activeSection, setActiveSection] = useState('start')
@@ -27,9 +27,18 @@ export default function Help() {
                   <span className="text-green-600 font-bold">1</span>
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-semibold text-gray-800">上传音频文件</h4>
-                  <p className="text-gray-600">点击"上传音频"按钮，选择MP3、WAV、OGG、FLAC或M4A格式的音频文件。支持批量上传和拖拽上传。</p>
-                  <p className="text-sm text-gray-500 mt-1">提示：可以上传外语学习、有声读物、音乐、提醒等各类音频。</p>
+                  <h4 className="font-semibold text-gray-800">获取音频内容</h4>
+                  <p className="text-gray-600 mb-2">两种方式获取音频：</p>
+                  <div className="ml-4 space-y-2 text-sm text-gray-600">
+                    <div>
+                      <span className="font-semibold text-blue-600">📁 本地上传：</span>
+                      <span>点击"上传音频"按钮，选择MP3、WAV、OGG、FLAC或M4A格式的音频文件，支持批量上传和拖拽上传。</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-blue-600">🌐 在线提取：</span>
+                      <span>点击"在线视频提取"按钮，粘贴YouTube、B站等视频链接，自动提取高质量音频，支持中文标题和文件名。</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -81,6 +90,23 @@ export default function Help() {
                   <li>• 拖拽上传功能</li>
                   <li>• 文件搜索和过滤</li>
                   <li>• 在线测试播放</li>
+                  <li>• 在线视频音频提取</li>
+                  <li>• 支持YouTube、B站等平台</li>
+                </ul>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Globe className="text-indigo-600" size={24} />
+                  <h3 className="text-lg font-semibold text-gray-800">在线功能</h3>
+                </div>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li>• 视频音频提取</li>
+                  <li>• 支持多平台视频</li>
+                  <li>• 自动获取视频标题</li>
+                  <li>• 高质量音频输出</li>
+                  <li>• 支持中文文件名</li>
+                  <li>• 一键安装依赖工具</li>
                 </ul>
               </div>
 
@@ -138,6 +164,31 @@ export default function Help() {
             </div>
 
             <div className="space-y-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-800 mb-2">Q: 支持哪些视频平台？</h4>
+                <p className="text-gray-600">A: 应用内置yt-dlp工具，支持1000+视频平台，包括但不限于：</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 ml-4">
+                  <li>YouTube - 全球最大视频平台</li>
+                  <li>Bilibili（B站）- 中文视频平台</li>
+                  <li>爱奇艺、腾讯视频、优酷等国内主流平台</li>
+                  <li>Twitter、Facebook、Instagram等社交平台</li>
+                  <li>Vimeo、Dailymotion等国际平台</li>
+                  <li>其他支持的平台可访问yt-dlp官方文档查询</li>
+                </ul>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-800 mb-2">Q: 在线视频提取音频失败？</h4>
+                <p className="text-gray-600">A: 请检查：</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 ml-4">
+                  <li>视频URL是否正确有效</li>
+                  <li>网络连接是否正常</li>
+                  <li>是否已安装FFmpeg和yt-dlp</li>
+                  <li>视频平台是否受支持</li>
+                  <li>尝试使用"一键安装FFmpeg"按钮</li>
+                </ul>
+              </div>
+
               <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <h4 className="font-semibold text-gray-800 mb-2">Q: 为什么音频播放失败？</h4>
                 <p className="text-gray-600">A: 请检查：</p>
@@ -208,18 +259,20 @@ export default function Help() {
                   <h4 className="font-semibold text-gray-700">适用场景</h4>
                   <ul className="list-disc list-inside text-sm text-gray-600 ml-4 space-y-1">
                     <li>个人闹钟：定时播放音乐、语音提醒</li>
-                    <li>语言学习：外语听力材料定时播放</li>
-                    <li>知识学习：课程音频、有声读物播放</li>
+                    <li>语言学习：外语听力材料定时播放，支持从YouTube、B站等提取教学视频音频</li>
+                    <li>知识学习：课程音频、有声读物播放，直接从在线课程提取音频</li>
                     <li>习惯养成：通过定时音频建立作息习惯</li>
-                    <li>家庭教育：为孩子设置学习提醒</li>
+                    <li>家庭教育：为孩子设置学习提醒，从在线资源获取优质音频内容</li>
+                    <li>播客收听：从视频平台提取音频节目，定时播放收听</li>
                   </ul>
                 </div>
 
                 <div>
                   <h4 className="font-semibold text-gray-700">主要功能</h4>
                   <p className="text-sm text-gray-600 mt-2">
-                    磨耳朵是一款开源免费的跨平台定时音频播放软件，通过灵活的定时播放功能，
-                    帮助用户实现个人闹钟、语言学习"磨耳朵"、知识学习等多种需求，养成良好习惯。
+                    磨耳朵是一款开源免费的跨平台定时音频播放软件，支持从YouTube、B站等主流视频平台在线提取音频，
+                    通过灵活的定时播放功能，帮助用户实现个人闹钟、语言学习"磨耳朵"、知识学习等多种需求，
+                    无需手动下载转换，一站式解决音频获取与定时播放问题，养成良好习惯。
                   </p>
                 </div>
 

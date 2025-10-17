@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Moerduo (磨耳朵) is an open-source, free, cross-platform scheduled audio playback application, built with Tauri, React, and Rust. Use cases include personal alarms, parents scheduling audio playback for children's "listening immersion" to aid memory and learning, and more.
+Moerduo (磨耳朵) is an open-source, free, cross-platform scheduled audio playback application, built with Tauri, React, and Rust. Use cases include personal alarms, parents scheduling audio playback for children's "listening immersion" to aid memory and learning, and more. The application also supports extracting audio from online videos, including YouTube, Bilibili, and other major platforms.
 
 ## Tech Stack
 
@@ -75,6 +75,8 @@ npm install              # Install frontend dependencies
 - Files are stored in `{app_data_dir}/audio/` with UUIDs as filenames
 - Original filenames and metadata stored in SQLite
 - Supported formats: MP3, WAV, OGG, FLAC, M4A
+- **Online video extraction**: Extract high-quality audio from YouTube, Bilibili, and other platforms using FFmpeg and yt-dlp
+- **Multi-language support**: Automatic handling of Chinese filenames and video titles
 
 ### Task Scheduling
 - Scheduler runs in a tokio task spawned at app startup (main.rs:41)
@@ -91,12 +93,15 @@ await invoke('get_audio_files', { /* params */ })
 
 ## Current Development Status
 
-**Completed (60% overall):**
+**Completed (70% overall):**
 - Full audio file management
 - Playlist CRUD with play modes
 - Task management UI
 - Basic audio playback
 - Database schema and initialization
+- **Online video audio extraction** with multi-platform support
+- **Multi-language filename encoding** (UTF-8/GBK support)
+- **Built-in FFmpeg and yt-dlp** integration with auto-installation
 
 **In Progress:**
 - Task scheduler auto-trigger logic
@@ -118,6 +123,9 @@ When testing:
 3. Create tasks with different repeat patterns and verify they're stored correctly
 4. Test manual playback before testing scheduled playback
 5. Check database state using SQLite tools if needed (db located in app data dir)
+6. **Test online video extraction**: Try extracting audio from different platforms (YouTube, Bilibili, etc.)
+7. **Test multi-language support**: Verify Chinese video titles and filenames are handled correctly
+8. **Test built-in tools**: Verify FFmpeg and yt-dlp auto-installation functionality
 
 ## Common Patterns
 
@@ -154,3 +162,5 @@ conn.execute(
 - **Windows**: System wake feature uses Win32 API (windows crate dependency)
 - **Paths**: Use Tauri's path resolver for cross-platform app data directories
 - **Audio**: Rodio handles cross-platform audio, but format support may vary by OS
+- **Online tools**: FFmpeg and yt-dlp are bundled in tools directory for offline functionality
+- **Encoding**: Windows environment supports both UTF-8 and GBK encoding for Chinese content
